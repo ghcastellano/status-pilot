@@ -1,0 +1,50 @@
+{
+  "name": "status-pilot",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "jira:check": "tsx scripts/check-connections.ts",
+    "jira:workflows": "tsx scripts/setup-jira-workflows.ts",
+    "jira:boards": "tsx scripts/setup-jira-boards.ts",
+    "jira:populate": "tsx scripts/populate-jira.ts",
+    "jira:sprints": "tsx scripts/setup-jira-sprints.ts",
+    "jira:restage": "tsx scripts/restage-jira.ts",
+    "db:schema": "tsx scripts/apply-schema.ts",
+    "db:sync": "tsx scripts/sync-jira-to-supabase.ts",
+    "test:reconcile": "tsx scripts/test-reconcile.ts"
+  },
+  "dependencies": {
+    "@radix-ui/react-select": "^2.1.1",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-tabs": "^1.1.0",
+    "@supabase/supabase-js": "^2.45.4",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.441.0",
+    "next": "^14.2.35",
+    "next-themes": "^0.3.0",
+    "openai": "^4.63.0",
+    "pg": "^8.21.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7",
+    "tailwind-merge": "^2.5.2",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^18.3.7",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "dotenv": "^16.4.5",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.12",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}

@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Base clara — máxima legibilidade em gravação */
+    --background: 0 0% 100%;
+    --foreground: 222 20% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 20% 14%;
+
+    --muted: 210 16% 96%;
+    --muted-foreground: 215 14% 42%;
+
+    /* Acento único da marca: #2f8f7a (verde-petróleo) */
+    --primary: 167 51% 37%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 16% 96%;
+    --secondary-foreground: 222 20% 14%;
+
+    --accent: 167 51% 37%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 18% 90%;
+    --input: 214 18% 90%;
+    --ring: 167 51% 37%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 222 24% 9%;
+    --foreground: 210 16% 96%;
+
+    --card: 222 22% 12%;
+    --card-foreground: 210 16% 96%;
+
+    --muted: 217 19% 18%;
+    --muted-foreground: 215 16% 65%;
+
+    --primary: 167 48% 45%;
+    --primary-foreground: 222 24% 9%;
+
+    --secondary: 217 19% 18%;
+    --secondary-foreground: 210 16% 96%;
+
+    --accent: 167 48% 45%;
+    --accent-foreground: 222 24% 9%;
+
+    --destructive: 0 63% 50%;
+    --destructive-foreground: 210 16% 96%;
+
+    --border: 217 19% 20%;
+    --input: 217 19% 20%;
+    --ring: 167 48% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+    font-variation-settings: normal;
+  }
+}
+
+/* Números grandes dos KPI cards — tabular para alinhar */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
