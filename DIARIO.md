@@ -42,3 +42,29 @@
 - [ ] (Opcional) Cron que avança cards no tempo → changelog REAL crescente.
 - [ ] (Opcional) Revogar/rotacionar o VERCEL_TOKEN se não for mais usar.
 - [ ] Gravar o build para o LinkedIn.
+
+---
+
+## 2026-06-04 — Sessão 2
+
+**Tempo:** _(informe início/fim)_
+
+### O que foi feito
+- **Dashboard simplificado** (gestor entende em 3s): insight por métrica no topo, 4 KPIs principais (cycle time, throughput/velocity, flow efficiency, previsibilidade) + 1 gráfico principal (cycle time scatterplot); avançadas (CFD, aging, histograma, trends) recolhíveis.
+- **Cores distintas** nos gráficos (fim da "mancha verde"); **eixos X/Y rotulados** e **tooltips com o nome da issue** (não o ID).
+- **Histórico sintético com variação temporal** + **padrões plantados** para a IA descobrir: épico-gargalo DISTINTO por time (Checkout/Cold Brew, Fidelidade/Espresso) e Code Review piorando nas últimas semanas. PRNG **isolado por time** (ajustes não vazam entre times).
+- **Insights da IA investigativos e acionáveis**: recebe um *bundle* analisável (série temporal, por épico, por estágio recente-vs-anterior, outliers); cruza dimensões, cita épico+estágio+número, e dá causa+ação quando há problema (só confirma quando saudável). Parse de JSON robusto com fallback (UI nunca quebra); cache estável.
+- **Perguntar** passou a considerar **os dois times** (comparação).
+- **Live-status sync:** o sync lê a coluna AO VIVO do Jira → mover um card + Sincronizar reflete WIP/estágio (timeline histórica segue sintética).
+- **Limpeza:** removidos `tabs`, `StageBar`, `releaseCycleTime`/`timeInReview`, `probe-jira`/`reset-jira`, código morto e dep órfã.
+
+### Verificado
+- Reconciliação Jira↔Supabase↔dashboard: **10/10**. tsc limpo, build verde, prod redeployada.
+- Insights específicos nos 2 times (acharam o épico certo de cada um, citam Code Review + outlier nominal).
+
+### Pendências / próximos passos
+- [ ] Colar o plano em `PLANO-SEMANA-1.md`.
+- [ ] Tornar o repo público (build-in-public), se quiser.
+- [ ] (Opcional) Cron que avança cards no tempo → changelog REAL crescente.
+- [ ] (Opcional) Revogar/rotacionar o `VERCEL_TOKEN` se não for mais usar.
+- [ ] Gravar o build para o LinkedIn.
