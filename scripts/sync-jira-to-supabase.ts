@@ -10,7 +10,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import { existsSync, readFileSync } from "node:fs";
-import { JiraClient, jiraConfigFromEnv } from "../lib/jira";
+import { JiraClient, jiraConfigFromEnv, normStageName, stageToStatus } from "../lib/jira";
 import { getSupabaseAdmin } from "../lib/supabase";
 import { dataset, EPICS } from "./data/cafe-aurora";
 import { extractSpmeta } from "./jira-desc";
@@ -87,8 +87,8 @@ async function main() {
         issue_key: i.key,
         title: i.fields.summary,
         type: meta.type,
-        status: meta.status,
-        current_stage: meta.current_stage,
+        status: stageToStatus(i.fields.status?.name ? normStageName(i.fields.status.name) : meta.current_stage),
+        current_stage: i.fields.status?.name ? normStageName(i.fields.status.name) : meta.current_stage,
         story_points: meta.story_points,
         created_at: meta.created_at,
         discovery_started_at: milestone("discovery_started_at"),

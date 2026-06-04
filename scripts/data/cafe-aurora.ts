@@ -35,7 +35,10 @@ function mulberry32(seed: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-const rng = mulberry32(20260603);
+// PRNG re-seedável: cada time usa sua própria semente, para que ajustes em um
+// time NÃO desloquem a sequência aleatória do outro (determinismo isolado).
+let rng = mulberry32(20260603);
+const reseed = (s: number) => { rng = mulberry32(s); };
 const pick = <T,>(arr: T[]): T => arr[Math.floor(rng() * arr.length)];
 const randInt = (min: number, max: number) => min + Math.floor(rng() * (max - min + 1));
 const randRange = (min: number, max: number) => min + rng() * (max - min);
@@ -235,27 +238,39 @@ function epicFor(title: string): string {
   for (const e of EPICS) if (e.match.test(title)) return e.key;
   return "platform";
 }
+
+// títulos agrupados por épico — p/ enviesar o épico-gargalo nos dados sintéticos
+const TITLES_BY_EPIC: Record<string, string[]> = {};
+for (const t of [...STORY_TITLES, ...BUG_TITLES, ...TASK_TITLES]) {
+  (TITLES_BY_EPIC[epicFor(t)] ??= []).push(t);
+}
+function titleForEpic(epicKey: string): string {
+  const pool = TITLES_BY_EPIC[epicKey];
+  return pool && pool.length ? pick(pool) : pick(STORY_TITLES);
+}
 const POINTS_POOL = [1, 2, 2, 3, 3, 3, 5, 5, 8];
 const iso = (msVal: number) => new Date(msVal).toISOString();
 const ymd = (msVal: number) => new Date(msVal).toISOString().slice(0, 10);
 const offMs = (offsetDays: number) => ANCHOR.getTime() + offsetDays * DAY;
 
 /**
- * Gargalo EMERGENTE em Code Review: itens cuja revisão termina nas últimas ~3
- * semanas levam progressivamente mais tempo em review. Cria variação temporal
- * realista (cycle time e time-in-review SOBEM no fim do período). Sintético/demo.
+ * PADRÕES PLANTADOS (sintético/demo) para a IA descobrir:
+ *  - cada time tem UM épico-gargalo DIFERENTE (não óbvio: varia entre times);
+ *  - o estágio Code Review/QA PIORA nas últimas ~4 semanas, concentrado nesse épico
+ *    (cycle time e time-in-review sobem; outliers caem nesse épico).
  */
-function reviewBottleneckFactor(workDoneOffsetDays: number): number {
-  const W = 28; // últimas 4 semanas
-  if (workDoneOffsetDays > -W) {
-    const t = Math.min(1, Math.max(0, (workDoneOffsetDays + W) / W)); // 0 (4 sem) → 1 (hoje)
-    return 1 + 2.0 * t; // 1x … 3x
-  }
-  return 1;
+const BOTTLENECK_EPIC: Record<string, string> = { espresso: "loyalty", coldbrew: "checkout" };
+
+function reviewFactor(workDoneOffsetDays: number, isBottleneck: boolean): number {
+  const W = 28; // janela de 4 semanas
+  const t = Math.min(1, Math.max(0, (workDoneOffsetDays + W) / W)); // 0 (4 sem atrás) → 1 (hoje)
+  const base = isBottleneck ? 1.5 : 1.0; // épico-gargalo já um pouco mais lento
+  const slope = isBottleneck ? 2.5 : 0.4; // e piora MUITO mais no período recente
+  return base * (1 + t * slope);
 }
 
 /** carimbos de tempo de uma issue atualmente no estágio currentIdx. */
-function buildStamps(stages: StageDef[], currentIdx: number, entryOffsetDays: number): StageStamp[] {
+function buildStamps(stages: StageDef[], currentIdx: number, entryOffsetDays: number, isBottleneck = false): StageStamp[] {
   const times: number[] = new Array(stages.length).fill(0);
   times[currentIdx] = offMs(entryOffsetDays);
   for (let i = currentIdx - 1; i >= 0; i--) {
@@ -264,7 +279,7 @@ function buildStamps(stages: StageDef[], currentIdx: number, entryOffsetDays: nu
     if (i === 7) {
       // index 7 = Code Review / QA (igual em Scrum e Kanban)
       const workDoneOffset = (times[i + 1] - ANCHOR.getTime()) / DAY;
-      dur *= reviewBottleneckFactor(workDoneOffset);
+      dur *= reviewFactor(workDoneOffset, isBottleneck);
     }
     times[i] = times[i + 1] - dur;
   }
@@ -334,6 +349,7 @@ function build(): BuildResult {
   };
 
   // ── ESPRESSO (Scrum, LS) ────────────────────────────────────
+  reseed(700101); // semente própria do time
   const ST = SCRUM_STAGES;
   const SPRINT_LEN = 14;
   const sprintDefs = [
@@ -359,6 +375,10 @@ function build(): BuildResult {
 
     for (const it of items) {
       const base = mkBase("LS", "espresso", it.type, it.points, sd.id);
+      // viés: concluídos das sprints recentes concentram no épico-gargalo (Fidelidade)
+      if (doneSoFar < targetDone && (sd.id === "S-15" || sd.id === "S-16") && rng() < 0.6) {
+        base.title = titleForEpic(BOTTLENECK_EPIC.espresso);
+      }
       let currentIdx: number;
       let entryOffset: number;
       if (doneSoFar < targetDone) {
@@ -382,7 +402,7 @@ function build(): BuildResult {
           entryOffset = -randRange(0.5, 3);
         }
       }
-      issues.push(assembleIssue(base, ST, currentIdx, buildStamps(ST, currentIdx, entryOffset)));
+      issues.push(assembleIssue(base, ST, currentIdx, buildStamps(ST, currentIdx, entryOffset, BOTTLENECK_EPIC.espresso === epicFor(base.title))));
     }
 
     sprints.push({
@@ -398,12 +418,13 @@ function build(): BuildResult {
   });
 
   // discovery track do Espresso (fora de sprint)
-  for (const ci of [0, 0, 1, 2, 3]) {
+  for (const ci of [0, 0, 1, 1, 2, 3, 3]) {
     const base = mkBase("LS", "espresso", randType(0.85), null, null);
-    issues.push(assembleIssue(base, ST, ci, buildStamps(ST, ci, -randRange(0.5, 8))));
+    issues.push(assembleIssue(base, ST, ci, buildStamps(ST, ci, -randRange(0.5, 8), BOTTLENECK_EPIC.espresso === epicFor(base.title))));
   }
 
   // ── COLD BREW (Kanban, LK) ──────────────────────────────────
+  reseed(700202); // semente própria do time
   // Concluídos espalhados em 12 semanas (throughput) — volume moderado, pois o
   // board esconde "done" antigo (cutoff). WIP forte e variado em todos os estágios.
   const KB = KANBAN_STAGES;
@@ -412,8 +433,10 @@ function build(): BuildResult {
     const n = w <= 2 ? 3 : 4;
     for (let i = 0; i < n; i++) {
       const base = mkBase("LK", "coldbrew", randType(0.6), null, null);
+      // viés: nas últimas 4 semanas, parte dos concluídos é do épico-gargalo (concentra o problema)
+      if (w <= 4 && rng() < 0.55) base.title = titleForEpic(BOTTLENECK_EPIC.coldbrew);
       const releaseOffset = Math.min(-(w * 7) + randRange(0, 6), -0.4);
-      issues.push(assembleIssue(base, KB, 9, buildStamps(KB, 9, releaseOffset)));
+      issues.push(assembleIssue(base, KB, 9, buildStamps(KB, 9, releaseOffset, BOTTLENECK_EPIC.coldbrew === epicFor(base.title))));
     }
   }
   const wipPlan: [number, number][] = [
@@ -423,7 +446,7 @@ function build(): BuildResult {
     for (let i = 0; i < count; i++) {
       const base = mkBase("LK", "coldbrew", randType(0.6), null, null);
       const maxAge = Math.min(7, STAGE_DUR[ci][1] + 2);
-      issues.push(assembleIssue(base, KB, ci, buildStamps(KB, ci, -randRange(0.4, maxAge))));
+      issues.push(assembleIssue(base, KB, ci, buildStamps(KB, ci, -randRange(0.4, maxAge), BOTTLENECK_EPIC.coldbrew === epicFor(base.title))));
     }
   }
 

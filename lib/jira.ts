@@ -182,6 +182,20 @@ export interface JiraIssue {
   fields: Record<string, any>;
 }
 
+/** normaliza o nome do status ao vivo do Jira p/ casar com os nomes dos estágios. */
+export function normStageName(name: string): string {
+  return /^em andamento$/i.test(name.trim()) ? "In Progress" : name.trim();
+}
+
+/** status normalizado (To Do/In Progress/Done) por PAPEL do estágio (delivery = In Progress). */
+const DELIVERY_STAGES = new Set(["in progress", "in development", "code review / qa", "ready for release"]);
+export function stageToStatus(stage: string): "To Do" | "In Progress" | "Done" {
+  const s = stage.toLowerCase().trim();
+  if (s === "live / done" || s === "done") return "Done";
+  if (DELIVERY_STAGES.has(s)) return "In Progress";
+  return "To Do";
+}
+
 /** Busca recursiva pelo bloco SPMETA na descrição ADF de uma issue. */
 export function extractSpmeta(node: any): any | null {
   if (!node) return null;

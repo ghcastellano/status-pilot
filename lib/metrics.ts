@@ -460,3 +460,92 @@ export function computeInsightInput(m: TeamMetrics): InsightInput {
     sayDoPct: m.scrum ? Math.round(m.scrum.sayDoRatioAvg * 100) : null,
   };
 }
+
+// ── Bundle de ANÁLISE para a IA investigar (não só o número agregado) ──
+export interface AnalysisBundle {
+  team: string;
+  method: BoardType;
+  cycleTime: { median: number; p85: number; deltaPct: number | null; weeklyP50: (number | null)[] };
+  throughput: { avgPerWeek: number; deltaPct: number | null; weekly: number[] };
+  flowEfficiencyPct: number;
+  predictability: { sle85: number };
+  byEpic: { epic: string; items: number; cycleMedian: number; cycleP85: number }[];
+  byStage: { stage: string; kind: string; medianDays: number; recentDays: number | null; priorDays: number | null }[];
+  outliers: { key: string; title: string; epic: string; deliveryDays: number; slowestStage: string }[];
+  agingHotspot: { stage: string; ageDays: number } | null;
+}
+
+export function computeAnalysisBundle(
+  m: TeamMetrics,
+  issues: IssueRow[],
+  epicNames: Record<string, string>
+): AnalysisBundle {
+  const now = referenceNow(issues);
+  const inp = computeInsightInput(m);
+  const released = issues.filter((i) => i.released_at && i.started_at && i.done_at);
+  const delivery = (i: IssueRow) => (ms(i.done_at)! - ms(i.started_at)!) / DAY;
+  const allCt = released.map(delivery).sort((a, b) => a - b);
+  const p85all = percentile(allCt, 0.85);
+  const epicName = (k: string | null) => (k ? epicNames[k] ?? k : "—");
+
+  // por épico
+  const epicMap = new Map<string, number[]>();
+  for (const i of released) {
+    const k = i.epic_key ?? "—";
+    if (!epicMap.has(k)) epicMap.set(k, []);
+    epicMap.get(k)!.push(delivery(i));
+  }
+  const byEpic = Array.from(epicMap.entries())
+    .map(([k, v]) => {
+      const s = v.slice().sort((a, b) => a - b);
+      return { epic: epicName(k), items: v.length, cycleMedian: round1(percentile(s, 0.5)), cycleP85: round1(percentile(s, 0.85)) };
+    })
+    .sort((a, b) => b.cycleMedian - a.cycleMedian);
+
+  // por estágio: tempo de permanência (recente vs anterior)
+  const order = canonicalStages(issues);
+  const recentCut = now - 21 * DAY;
+  const byStage = order
+    .filter((s) => s.kind !== "done")
+    .map((s) => {
+      const all: number[] = [], recent: number[] = [], prior: number[] = [];
+      for (const i of issues) {
+        const idx = i.stages.findIndex((x) => x.key === s.key);
+        if (idx < 0 || idx + 1 >= i.stages.length) continue;
+        const dwell = (ms(i.stages[idx + 1].at)! - ms(i.stages[idx].at)!) / DAY;
+        if (dwell < 0) continue;
+        all.push(dwell);
+        const endRef = i.released_at ? ms(i.released_at)! : ms(i.stages[idx + 1].at)!;
+        (endRef > recentCut ? recent : prior).push(dwell);
+      }
+      const md = (a: number[]) => (a.length ? round1(percentile(a.slice().sort((x, y) => x - y), 0.5)) : null);
+      return { stage: s.jira, kind: s.kind, medianDays: md(all) ?? 0, recentDays: md(recent), priorDays: md(prior) };
+    });
+
+  // outliers (acima do p85) com épico e estágio mais lento
+  const outliers = released
+    .filter((i) => delivery(i) > p85all)
+    .map((i) => {
+      let slow = "", maxD = -1;
+      for (let k = 0; k < i.stages.length - 1; k++) {
+        const d = (ms(i.stages[k + 1].at)! - ms(i.stages[k].at)!) / DAY;
+        if (d > maxD) { maxD = d; slow = i.stages[k].jira; }
+      }
+      return { key: i.issue_key, title: i.title, epic: epicName(i.epic_key), deliveryDays: round1(delivery(i)), slowestStage: slow };
+    })
+    .sort((a, b) => b.deliveryDays - a.deliveryDays)
+    .slice(0, 8);
+
+  return {
+    team: m.team.name,
+    method: m.team.board_type,
+    cycleTime: { median: m.flow.deliveryCycleTime.median, p85: m.flow.deliveryCycleTime.p85, deltaPct: inp.cycleTimeDeltaPct, weeklyP50: m.advanced.trends.map((t) => t.cycleTimeP50) },
+    throughput: { avgPerWeek: m.flow.throughput.perWeekAvg, deltaPct: inp.throughputDeltaPct, weekly: m.advanced.trends.map((t) => t.throughput) },
+    flowEfficiencyPct: Math.round(m.flow.flowEfficiency * 100),
+    predictability: { sle85: m.flow.deliveryCycleTime.p85 },
+    byEpic,
+    byStage,
+    outliers,
+    agingHotspot: inp.agingHotspot,
+  };
+}

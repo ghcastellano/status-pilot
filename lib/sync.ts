@@ -6,7 +6,7 @@
  * a granularidade dos estágios do bloco SPMETA. Times/sprints/épicos são config
  * já no banco e não são tocados aqui.
  */
-import { JiraClient, jiraConfigFromEnv, extractSpmeta } from "./jira";
+import { JiraClient, jiraConfigFromEnv, extractSpmeta, normStageName, stageToStatus } from "./jira";
 import { getSupabaseAdmin } from "./supabase";
 
 // marco (coluna no banco) → nome do custom field de data no Jira
@@ -57,6 +57,9 @@ export async function syncIssuesFromJira(): Promise<SyncResult> {
       if (!meta) continue;
       const milestone = (key: string) =>
         (fieldId[key] ? i.fields[fieldId[key]] : null) ?? meta[key] ?? null;
+      // ESTADO ATUAL vem da coluna AO VIVO do Jira (mover um card + sync reflete aqui);
+      // a timeline histórica continua sintética (Jira não backdata).
+      const liveStage = i.fields.status?.name ? normStageName(i.fields.status.name) : meta.current_stage;
       rows.push({
         id: i.key,
         team_id: meta.team_id,
@@ -65,8 +68,8 @@ export async function syncIssuesFromJira(): Promise<SyncResult> {
         issue_key: i.key,
         title: i.fields.summary,
         type: meta.type,
-        status: meta.status,
-        current_stage: meta.current_stage,
+        status: stageToStatus(liveStage),
+        current_stage: liveStage,
         story_points: meta.story_points,
         created_at: meta.created_at,
         discovery_started_at: milestone("discovery_started_at"),

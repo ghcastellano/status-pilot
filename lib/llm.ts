@@ -4,7 +4,7 @@
  * dele. A IA não toca no banco — recebe só o snapshot determinístico.
  */
 import OpenAI from "openai";
-import { computeInsightInput, type TeamMetrics } from "./metrics";
+import type { TeamMetrics, AnalysisBundle } from "./metrics";
 
 let client: OpenAI | null = null;
 function getClient(): OpenAI {
@@ -64,41 +64,66 @@ export interface MetricInsights {
   chart: string; // leitura do cycle time scatterplot
 }
 
-/** Insight POR MÉTRICA: uma frase curtíssima por KPI + pelo gráfico (1 chamada JSON). */
-export async function generateMetricInsights(m: TeamMetrics): Promise<MetricInsights> {
-  const inp = computeInsightInput(m);
-  const secondary = inp.method === "scrum" ? "velocity" : "throughput";
-  const res = await getClient().chat.completions.create({
-    model: MODEL,
-    temperature: 0.3,
-    max_tokens: 320,
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          GROUNDING +
-          ` Para CADA métrica, escreva UMA frase curtíssima (máx ~12 palavras) que interpreta ` +
-          `o número/tendência e diz se é bom/ruim ou o que observar. Cite o delta quando houver. ` +
-          `Responda APENAS um objeto JSON com exatamente estas chaves: "cycleTime", "secondary", ` +
-          `"flowEfficiency", "predictability", "chart". A chave "secondary" é sobre ${secondary}. ` +
-          `"chart" = leitura do cycle time scatterplot (tendência recente dos pontos).`,
-      },
-      { role: "user", content: JSON.stringify(inp) },
-    ],
-  });
-  const raw = res.choices[0]?.message?.content ?? "{}";
+const EMPTY_INSIGHTS: MetricInsights = { cycleTime: "", secondary: "", flowEfficiency: "", predictability: "", chart: "" };
+
+function investigativePrompt(secondary: string): string {
+  return (
+    "Você é um analista de fluxo ágil que INVESTIGA dados — não traduz métricas. Você recebe um pacote " +
+    "com: série temporal semanal, quebra POR ÉPICO, quebra POR ESTÁGIO (tempo recente vs anterior) e os " +
+    "OUTLIERS (itens acima do p85, com épico e estágio mais lento).\n\n" +
+    "Para CADA métrica, escreva UMA frase (máx ~35 palavras) que: (1) aponte ONDE está o fenômeno — qual " +
+    "ÉPICO e qual ESTÁGIO —, cruzando pelo menos DUAS dimensões; (2) cite um DADO específico (épico nomeado, " +
+    "estágio, número) que comprove — a frase só pode fazer sentido sobre ESTES dados.\n\n" +
+    "Se houver PROBLEMA (tendência ruim ou gargalo): TERMINE com uma hipótese de CAUSA plausível + uma AÇÃO " +
+    "concreta. Ex.: 'Cycle time do épico Pagamentos chegou a 6.9d — o Code Review desse épico dobrou; provável " +
+    "falta de revisor ou PRs grandes, vale revisar o tamanho das entregas de Pagamentos.' " +
+    "Se a métrica estiver SAUDÁVEL: NÃO invente problema nem ação — apenas confirme com o dado específico " +
+    "(ex.: 'previsibilidade boa: 85% dos itens em ≤7.7d, sem outliers relevantes').\n\n" +
+    "PROIBIDO: frases genéricas que serviriam para qualquer número ('há espaço para melhorias', 'sugere boa " +
+    "previsibilidade' sem o número, 'indica possível gargalo' sem dizer onde). Não repita a definição + o número.\n\n" +
+    "Português do Brasil; termos técnicos em inglês (cycle time, throughput, WIP, flow efficiency). " +
+    `Responda APENAS um objeto JSON com as chaves: "cycleTime", "secondary" (sobre ${secondary}), ` +
+    `"flowEfficiency", "predictability", "chart" (leitura do cycle time scatterplot — tendência recente).`
+  );
+}
+
+/** parse robusto: tolera code fences / texto extra; nunca lança. */
+function parseInsights(raw: string): MetricInsights {
   try {
-    const o = JSON.parse(raw);
+    const match = raw.match(/\{[\s\S]*\}/);
+    const o = JSON.parse(match ? match[0] : raw);
+    const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
     return {
-      cycleTime: o.cycleTime ?? "",
-      secondary: o.secondary ?? "",
-      flowEfficiency: o.flowEfficiency ?? "",
-      predictability: o.predictability ?? "",
-      chart: o.chart ?? "",
+      cycleTime: s(o.cycleTime),
+      secondary: s(o.secondary),
+      flowEfficiency: s(o.flowEfficiency),
+      predictability: s(o.predictability),
+      chart: s(o.chart),
     };
   } catch {
-    return { cycleTime: "", secondary: "", flowEfficiency: "", predictability: "", chart: "" };
+    console.error("parseInsights: JSON inválido do LLM:", raw?.slice(0, 200));
+    return EMPTY_INSIGHTS;
+  }
+}
+
+/** Insight POR MÉTRICA, INVESTIGATIVO (a IA cruza épico × estágio × outliers). */
+export async function generateMetricInsights(bundle: AnalysisBundle): Promise<MetricInsights> {
+  const secondary = bundle.method === "scrum" ? "velocity" : "throughput";
+  try {
+    const res = await getClient().chat.completions.create({
+      model: MODEL,
+      temperature: 0.4,
+      max_tokens: 500,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: investigativePrompt(secondary) },
+        { role: "user", content: JSON.stringify(bundle) },
+      ],
+    });
+    return parseInsights(res.choices[0]?.message?.content ?? "{}");
+  } catch (e) {
+    console.error("generateMetricInsights falhou:", (e as Error).message);
+    return EMPTY_INSIGHTS; // nunca quebra a UI
   }
 }
 
