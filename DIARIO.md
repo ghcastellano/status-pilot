@@ -28,9 +28,17 @@
 - Métricas batendo (Espresso: velocity 36.3 σ1.5, say-do 97%; Cold Brew: cycle 4.6d, throughput 2.4/sem, flow eff. 41%).
 - `/api/ask` (grounded + cache hit), `/api/report` (report completo), tsc limpo, dashboard HTTP 200.
 
+### Sessão 1 — adições posteriores
+- Campos de data REAIS no Jira (7 marcos), filtráveis por JQL; sync lê deles.
+- Reconciliação Jira↔Supabase↔dashboard: **10/10** (`npm run test:reconcile`).
+- WIP redefinido (em fluxo + delivery); 4 itens presos no Kanban reposicionados.
+- Gráficos estilo eazyBI/Actionable Agile **construídos por nós**: CFD, Work Item Aging, Cycle Time Histogram (p50/85/95), Throughput, Trends (evolução). Filtros por épico/tipo/período.
+- Botão "Sincronizar agora" (/api/sync).
+- **Deploy no Vercel:** https://status-pilot-omega.vercel.app · Repo: https://github.com/ghcastellano/status-pilot
+
 ### Pendências / próximos passos
-- [ ] Deploy no Vercel (push + env vars).
 - [ ] Colar o plano em `PLANO-SEMANA-1.md`.
-- [ ] (Opcional) Leitor do changelog real do Jira como demonstração da mecânica.
-- [ ] (Opcional) Reposicionar 4 itens do Kanban presos em "Opportunity Backlog" no board.
+- [ ] Tornar o repo público (build-in-public), se quiser.
+- [ ] (Opcional) Cron que avança cards no tempo → changelog REAL crescente.
+- [ ] (Opcional) Revogar/rotacionar o VERCEL_TOKEN se não for mais usar.
 - [ ] Gravar o build para o LinkedIn.

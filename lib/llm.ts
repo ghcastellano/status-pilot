@@ -4,7 +4,7 @@
  * dele. A IA não toca no banco — recebe só o snapshot determinístico.
  */
 import OpenAI from "openai";
-import type { TeamMetrics } from "./metrics";
+import { computeInsightInput, type TeamMetrics } from "./metrics";
 
 let client: OpenAI | null = null;
 function getClient(): OpenAI {
@@ -29,9 +29,7 @@ export function buildSnapshot(m: TeamMetrics): string {
     flow_cycle_times_dias: {
       discovery: f.discoveryCycleTime,
       delivery: f.deliveryCycleTime,
-      release: f.releaseCycleTime,
       lead_time: f.leadTime,
-      time_in_review: f.timeInReview,
     },
     flow_efficiency_pct: Math.round(f.flowEfficiency * 100),
     throughput_por_semana: { media: f.throughput.perWeekAvg, serie: f.throughput.series.map((s) => s.count) },
@@ -58,14 +56,71 @@ const GROUNDING =
   "do Brasil, mas mantenha os termos técnicos em inglês (cycle time, throughput, lead " +
   "time, WIP, say-do ratio, flow efficiency). Seja direto e conciso.";
 
-export async function answerQuestion(m: TeamMetrics, question: string): Promise<string> {
+export interface MetricInsights {
+  cycleTime: string;
+  secondary: string; // throughput (kanban) | velocity (scrum)
+  flowEfficiency: string;
+  predictability: string;
+  chart: string; // leitura do cycle time scatterplot
+}
+
+/** Insight POR MÉTRICA: uma frase curtíssima por KPI + pelo gráfico (1 chamada JSON). */
+export async function generateMetricInsights(m: TeamMetrics): Promise<MetricInsights> {
+  const inp = computeInsightInput(m);
+  const secondary = inp.method === "scrum" ? "velocity" : "throughput";
+  const res = await getClient().chat.completions.create({
+    model: MODEL,
+    temperature: 0.3,
+    max_tokens: 320,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content:
+          GROUNDING +
+          ` Para CADA métrica, escreva UMA frase curtíssima (máx ~12 palavras) que interpreta ` +
+          `o número/tendência e diz se é bom/ruim ou o que observar. Cite o delta quando houver. ` +
+          `Responda APENAS um objeto JSON com exatamente estas chaves: "cycleTime", "secondary", ` +
+          `"flowEfficiency", "predictability", "chart". A chave "secondary" é sobre ${secondary}. ` +
+          `"chart" = leitura do cycle time scatterplot (tendência recente dos pontos).`,
+      },
+      { role: "user", content: JSON.stringify(inp) },
+    ],
+  });
+  const raw = res.choices[0]?.message?.content ?? "{}";
+  try {
+    const o = JSON.parse(raw);
+    return {
+      cycleTime: o.cycleTime ?? "",
+      secondary: o.secondary ?? "",
+      flowEfficiency: o.flowEfficiency ?? "",
+      predictability: o.predictability ?? "",
+      chart: o.chart ?? "",
+    };
+  } catch {
+    return { cycleTime: "", secondary: "", flowEfficiency: "", predictability: "", chart: "" };
+  }
+}
+
+/** Responde considerando TODOS os times (snapshots de cada um). */
+export async function answerAcrossTeams(list: TeamMetrics[], question: string): Promise<string> {
+  const snaps = list
+    .map((m) => `### Time ${m.team.name} (${m.team.board_type})\n${buildSnapshot(m)}`)
+    .join("\n\n");
   const res = await getClient().chat.completions.create({
     model: MODEL,
     temperature: 0.2,
-    max_tokens: 500,
+    max_tokens: 600,
     messages: [
-      { role: "system", content: GROUNDING },
-      { role: "system", content: `SNAPSHOT do time ${m.team.name}:\n${buildSnapshot(m)}` },
+      {
+        role: "system",
+        content:
+          GROUNDING +
+          " Você recebe os SNAPSHOTS de TODOS os times. Considere todos ao responder e " +
+          "compare entre eles quando fizer sentido. Se a pergunta for sobre um time específico, " +
+          "foque nele.",
+      },
+      { role: "system", content: `SNAPSHOTS:\n${snaps}` },
       { role: "user", content: question },
     ],
   });

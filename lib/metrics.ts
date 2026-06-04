@@ -117,9 +117,7 @@ export interface StageCount { stage: string; count: number; kind: string }
 export interface FlowMetrics {
   discoveryCycleTime: CtStat;
   deliveryCycleTime: CtStat;
-  releaseCycleTime: CtStat;
   leadTime: CtStat;
-  timeInReview: CtStat;
   flowEfficiency: number; // 0..1
   throughput: { perWeekAvg: number; series: { weekLabel: string; weekStart: string; count: number }[] };
   wip: number; // tudo em fluxo (fora do funil e de Live/Done)
@@ -190,9 +188,7 @@ export function computeFlow(issues: IssueRow[], now: number, weeks = 8): FlowMet
   return {
     discoveryCycleTime: intervalStats(issues, "discovery_started_at", "discovery_done_at"),
     deliveryCycleTime: intervalStats(issues, "started_at", "done_at"),
-    releaseCycleTime: intervalStats(issues, "done_at", "released_at"),
     leadTime: intervalStats(issues, "created_at", "released_at"),
-    timeInReview: intervalStats(issues, "review_started_at", "done_at"),
     flowEfficiency: flowEfficiency(issues),
     throughput: { perWeekAvg, series },
     // WIP = tudo "em fluxo": fora do funil (Opportunity Backlog) e de Live/Done.
@@ -410,5 +406,57 @@ export function computeTeamMetrics(
     totals: { issues: ti.length, epics },
     appliedFilters: { epic: opts.epic ?? null, type: opts.type ?? null, weeks },
     availableFilters,
+  };
+}
+
+// ── Insight automático: deltas/tendências p/ a IA interpretar ──
+export interface InsightInput {
+  team: string;
+  method: BoardType;
+  cycleTimeMedian: number;
+  cycleTimeDeltaPct: number | null; // últimas 2 sem vs 4 anteriores
+  throughputAvg: number;
+  throughputDeltaPct: number | null;
+  flowEfficiencyPct: number;
+  predictabilityP85: number; // SLE: 85% entregam em ≤ X dias
+  wipNow: number;
+  wipTrend: "subindo" | "caindo" | "estável";
+  agingHotspot: { stage: string; ageDays: number } | null;
+  velocity: number | null; // Scrum
+  sayDoPct: number | null; // Scrum
+}
+
+const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+const deltaPct = (recent: number, prior: number): number | null =>
+  prior > 0 ? Math.round(((recent - prior) / prior) * 100) : null;
+
+export function computeInsightInput(m: TeamMetrics): InsightInput {
+  const tr = m.advanced.trends;
+  const cts = tr.map((t) => t.cycleTimeP50).filter((x): x is number => x != null);
+  const ctRecent = avg(cts.slice(-2));
+  const ctPrior = avg(cts.slice(-6, -2));
+  const tps = tr.map((t) => t.throughput);
+  const tpRecent = avg(tps.slice(-2));
+  const tpPrior = avg(tps.slice(-6, -2));
+  const wips = tr.map((t) => t.wip);
+  const wipNow = wips.at(-1) ?? m.flow.wip;
+  const wipPrior = wips.at(-5) ?? wipNow;
+  const wipTrend = wipNow > wipPrior * 1.15 ? "subindo" : wipNow < wipPrior * 0.85 ? "caindo" : "estável";
+  const hot = m.advanced.aging.points[0]; // já ordenado desc por idade
+
+  return {
+    team: m.team.name,
+    method: m.team.board_type,
+    cycleTimeMedian: m.flow.deliveryCycleTime.median,
+    cycleTimeDeltaPct: ctPrior > 0 ? deltaPct(ctRecent, ctPrior) : null,
+    throughputAvg: m.flow.throughput.perWeekAvg,
+    throughputDeltaPct: tpPrior > 0 ? deltaPct(tpRecent, tpPrior) : null,
+    flowEfficiencyPct: Math.round(m.flow.flowEfficiency * 100),
+    predictabilityP85: m.flow.deliveryCycleTime.p85,
+    wipNow,
+    wipTrend,
+    agingHotspot: hot ? { stage: hot.stage, ageDays: hot.ageDays } : null,
+    velocity: m.scrum?.avgVelocity ?? null,
+    sayDoPct: m.scrum ? Math.round(m.scrum.sayDoRatioAvg * 100) : null,
   };
 }

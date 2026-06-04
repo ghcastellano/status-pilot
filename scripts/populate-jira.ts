@@ -6,7 +6,7 @@
  *      campos de data e descrição com SPMETA (timeline sintética completa)
  *   3. move a issue até o current_stage (transição com match exato de nome)
  *
- * Rodar: npx tsx scripts/populate-jira.ts   (rode reset-jira.ts antes p/ rebuild)
+ * Rodar: npx tsx scripts/populate-jira.ts   (rode cleanup-jira.ts antes p/ rebuild)
  * Idempotente: scripts/.jira-keymap.json guarda o que já foi criado.
  */
 import { config } from "dotenv";

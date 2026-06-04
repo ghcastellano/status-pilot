@@ -87,5 +87,8 @@ export async function syncIssuesFromJira(): Promise<SyncResult> {
     byTeam.push({ team: team.id, count: rows.length });
   }
 
+  // dados mudaram → invalida o cache de respostas/insights/reports
+  await sb.from("qa_cache").delete().gte("id", 0);
+
   return { byTeam, total: byTeam.reduce((a, b) => a + b.count, 0) };
 }

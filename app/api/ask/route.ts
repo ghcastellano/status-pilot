@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchTeamData } from "@/lib/data";
+import { fetchTeams, fetchTeamData } from "@/lib/data";
 import { computeTeamMetrics } from "@/lib/metrics";
 import { validateQuestion, normalizeForCache, isValidTeamId } from "@/lib/validate";
 import { checkRateLimit, bucketFrom, RATE_LIMIT } from "@/lib/rate-limit";
 import { getCachedAnswer, setCachedAnswer } from "@/lib/cache";
-import { answerQuestion } from "@/lib/llm";
+import { answerAcrossTeams } from "@/lib/llm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,11 +40,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3) métricas determinísticas + LLM sobre o snapshot
-    const { team, sprints, issues } = await fetchTeamData(teamId);
-    if (!team) return NextResponse.json({ error: "Time não encontrado." }, { status: 404 });
-    const metrics = computeTeamMetrics(team, sprints, issues);
-    const answer = await answerQuestion(metrics, v.value);
+    // 3) métricas de TODOS os times + LLM sobre os snapshots combinados
+    const teams = await fetchTeams();
+    const list = [];
+    for (const t of teams) {
+      const { team, sprints, issues, epics } = await fetchTeamData(t.id);
+      if (!team) continue;
+      const epicNames = Object.fromEntries(epics.map((e) => [e.epic_key, e.name]));
+      list.push(computeTeamMetrics(team, sprints, issues, { epicNames }));
+    }
+    const answer = await answerAcrossTeams(list, v.value);
 
     await setCachedAnswer(teamId, norm, answer);
     return NextResponse.json({ answer, cached: false, remaining: rl.remaining });

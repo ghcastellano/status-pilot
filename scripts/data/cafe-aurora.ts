@@ -240,13 +240,33 @@ const iso = (msVal: number) => new Date(msVal).toISOString();
 const ymd = (msVal: number) => new Date(msVal).toISOString().slice(0, 10);
 const offMs = (offsetDays: number) => ANCHOR.getTime() + offsetDays * DAY;
 
+/**
+ * Gargalo EMERGENTE em Code Review: itens cuja revisão termina nas últimas ~3
+ * semanas levam progressivamente mais tempo em review. Cria variação temporal
+ * realista (cycle time e time-in-review SOBEM no fim do período). Sintético/demo.
+ */
+function reviewBottleneckFactor(workDoneOffsetDays: number): number {
+  const W = 28; // últimas 4 semanas
+  if (workDoneOffsetDays > -W) {
+    const t = Math.min(1, Math.max(0, (workDoneOffsetDays + W) / W)); // 0 (4 sem) → 1 (hoje)
+    return 1 + 2.0 * t; // 1x … 3x
+  }
+  return 1;
+}
+
 /** carimbos de tempo de uma issue atualmente no estágio currentIdx. */
 function buildStamps(stages: StageDef[], currentIdx: number, entryOffsetDays: number): StageStamp[] {
   const times: number[] = new Array(stages.length).fill(0);
   times[currentIdx] = offMs(entryOffsetDays);
   for (let i = currentIdx - 1; i >= 0; i--) {
     const [a, b] = STAGE_DUR[i];
-    times[i] = times[i + 1] - randRange(a, b) * DAY;
+    let dur = randRange(a, b) * DAY;
+    if (i === 7) {
+      // index 7 = Code Review / QA (igual em Scrum e Kanban)
+      const workDoneOffset = (times[i + 1] - ANCHOR.getTime()) / DAY;
+      dur *= reviewBottleneckFactor(workDoneOffset);
+    }
+    times[i] = times[i + 1] - dur;
   }
   const out: StageStamp[] = [];
   for (let i = 0; i <= currentIdx; i++) {
@@ -388,7 +408,8 @@ function build(): BuildResult {
   // board esconde "done" antigo (cutoff). WIP forte e variado em todos os estágios.
   const KB = KANBAN_STAGES;
   for (let w = 12; w >= 1; w--) {
-    const n = randInt(2, 3);
+    // ~4/semana p/ p50 estável; dip leve nas 2 últimas semanas (gargalo)
+    const n = w <= 2 ? 3 : 4;
     for (let i = 0; i < n; i++) {
       const base = mkBase("LK", "coldbrew", randType(0.6), null, null);
       const releaseOffset = Math.min(-(w * 7) + randRange(0, 6), -0.4);
@@ -396,7 +417,7 @@ function build(): BuildResult {
     }
   }
   const wipPlan: [number, number][] = [
-    [0, 4], [1, 3], [2, 4], [3, 3], [4, 3], [5, 4], [6, 4], [7, 3], [8, 3],
+    [0, 2], [1, 2], [2, 2], [3, 2], [4, 2], [5, 2], [6, 2], [7, 2], [8, 2],
   ];
   for (const [ci, count] of wipPlan) {
     for (let i = 0; i < count; i++) {

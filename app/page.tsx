@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Sparkles, ChevronDown } from "lucide-react";
 import { useTeam } from "@/components/team-context";
 import { KpiCard } from "@/components/kpi-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CycleScatter, ThroughputBar, VelocityBar, BurndownLine, StageBar } from "@/components/charts";
+import { CycleScatter, ThroughputBar, VelocityBar, BurndownLine } from "@/components/charts";
 import { CFDChart, AgingScatter, CycleHistogram, TrendsChart } from "@/components/charts-advanced";
 
 const PERIODS = [
@@ -27,6 +28,9 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = React.useState(false);
   const [refresh, setRefresh] = React.useState(0);
   const [syncMsg, setSyncMsg] = React.useState<string | null>(null);
+  const [insights, setInsights] = React.useState<any>(null);
+  const [insightLoading, setInsightLoading] = React.useState(false);
+  const [showAdvanced, setShowAdvanced] = React.useState(false);
 
   React.useEffect(() => {
     if (!selectedTeam) return;
@@ -35,12 +39,33 @@ export default function DashboardPage() {
     const qs = new URLSearchParams({ teamId: selectedTeam.id, weeks });
     if (epic !== "all") qs.set("epic", epic);
     if (type !== "all") qs.set("type", type);
-    fetch(`/api/metrics?${qs}`)
+    fetch(`/api/metrics?${qs}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : r.json().then((e) => Promise.reject(new Error(e.error)))))
       .then(setM)
       .catch((e) => setErr(e.message))
       .finally(() => setLoading(false));
   }, [selectedTeam, epic, type, weeks, refresh]);
+
+  // insight automático (separado, cacheado por time)
+  React.useEffect(() => {
+    if (!selectedTeam) return;
+    setInsightLoading(true);
+    setInsights(null);
+    fetch("/api/insights", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId: selectedTeam.id }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => setInsights(d.insights))
+      .catch(() => setInsights(null))
+      .finally(() => setInsightLoading(false));
+  }, [selectedTeam, refresh]);
+
+  React.useEffect(() => {
+    setEpic("all");
+    setType("all");
+  }, [selectedTeam?.id]);
 
   async function doSync() {
     setSyncing(true);
@@ -58,12 +83,6 @@ export default function DashboardPage() {
       setTimeout(() => setSyncMsg(null), 4000);
     }
   }
-
-  // reseta filtros ao trocar de time
-  React.useEffect(() => {
-    setEpic("all");
-    setType("all");
-  }, [selectedTeam?.id]);
 
   if (loading && !m) {
     return (
@@ -84,108 +103,112 @@ export default function DashboardPage() {
   const stageOrder: string[] = adv.cfd.stages.map((s: any) => s.jira);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Cabeçalho + filtros */}
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{m.team.name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">{m.team.name}</h1>
+            <Badge variant="secondary" title="A estrutura (board, sprints, épicos) é real no Jira; a linha do tempo é sintética para demonstração.">
+              histórico sintético · demo
+            </Badge>
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">{m.team.description}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {m.totals.issues} itens · {m.totals.epics} épicos · dados do Jira (campos reais)
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={epic} onValueChange={setEpic}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="Épico" /></SelectTrigger>
+            <SelectTrigger className="w-44"><SelectValue placeholder="Épico" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os épicos</SelectItem>
               {m.availableFilters.epics.map((e: any) => <SelectItem key={e.key} value={e.key}>{e.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={type} onValueChange={setType}>
-            <SelectTrigger className="w-36"><SelectValue placeholder="Tipo" /></SelectTrigger>
+            <SelectTrigger className="w-32"><SelectValue placeholder="Tipo" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os tipos</SelectItem>
               {m.availableFilters.types.map((t: string) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={weeks} onValueChange={setWeeks}>
-            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
             <SelectContent>{PERIODS.map((p) => <SelectItem key={p.v} value={p.v}>{p.label}</SelectItem>)}</SelectContent>
           </Select>
-          <Button variant="outline" onClick={doSync} disabled={syncing} title="Reler os dados do Jira">
+          <Button variant="outline" onClick={doSync} disabled={syncing}>
             <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
             {syncing ? "Sincronizando…" : "Sincronizar"}
           </Button>
         </div>
       </div>
-      {syncMsg && <p className="-mt-4 text-xs text-primary">{syncMsg}</p>}
+      {syncMsg && <p className="text-xs text-primary">{syncMsg}</p>}
 
-      {/* Flow cycle times */}
-      <section>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Flow cycle times</h2>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KpiCard accent label="Discovery cycle time" value={f.discoveryCycleTime.median} unit="d" sub={`p85 ${f.discoveryCycleTime.p85} · p95 ${f.discoveryCycleTime.p95}`} />
-          <KpiCard accent label="Delivery cycle time" value={f.deliveryCycleTime.median} unit="d" sub={`p85 ${f.deliveryCycleTime.p85} · p95 ${f.deliveryCycleTime.p95}`} />
-          <KpiCard accent label="Release cycle time" value={f.releaseCycleTime.median} unit="d" sub={`p85 ${f.releaseCycleTime.p85}`} />
-          <KpiCard label="Lead time" value={f.leadTime.median} unit="d" sub={`p85 ${f.leadTime.p85} · p95 ${f.leadTime.p95}`} />
-        </div>
-      </section>
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Sparkles className="h-3.5 w-3.5 text-primary" />
+        {insightLoading ? "IA interpretando cada métrica…" : "Leitura automática da IA em cada métrica"}
+      </div>
 
-      {/* KPIs do método */}
-      <section>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">{isScrum ? "Scrum" : "Fluxo"}</h2>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {isScrum && m.scrum ? (
-            <>
-              <KpiCard label="Velocity (média)" value={m.scrum.avgVelocity} unit="pts" sub={`σ ${m.scrum.velocityStdev}`} />
-              <KpiCard label="Say-do ratio" value={Math.round(m.scrum.sayDoRatioAvg * 100)} unit="%" sub="committed × done" />
-              <KpiCard label="Sprint atual" value={`${m.scrum.currentSprint?.completed ?? 0}/${m.scrum.currentSprint?.committed ?? 0}`} unit="pts" sub={m.scrum.currentSprint?.name} />
-              <KpiCard label="Flow efficiency" value={Math.round(f.flowEfficiency * 100)} unit="%" sub="ativo ÷ total" />
-            </>
-          ) : (
-            <>
-              <KpiCard label="Throughput" value={f.throughput.perWeekAvg} unit="/sem" sub="itens concluídos" />
-              <KpiCard label="WIP (em fluxo)" value={f.wip} sub={`${f.deliveryWip} em delivery`} />
-              <KpiCard label="Flow efficiency" value={Math.round(f.flowEfficiency * 100)} unit="%" sub="ativo ÷ total" />
-              <KpiCard label="Itens entregues" value={f.totalReleased} sub="total (Live / Done)" />
-            </>
-          )}
-        </div>
-      </section>
+      {/* 4 KPIs principais — cada um com a interpretação da IA */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard accent label="Cycle time" value={f.deliveryCycleTime.median} unit="d" sub={`p85 ${f.deliveryCycleTime.p85}d`} insight={insights?.cycleTime} />
+        {isScrum ? (
+          <KpiCard label="Velocity" value={m.scrum?.avgVelocity ?? 0} unit="pts" sub={`σ ${m.scrum?.velocityStdev ?? 0}`} insight={insights?.secondary} />
+        ) : (
+          <KpiCard label="Throughput" value={f.throughput.perWeekAvg} unit="/sem" sub="itens concluídos" insight={insights?.secondary} />
+        )}
+        <KpiCard label="Flow efficiency" value={Math.round(f.flowEfficiency * 100)} unit="%" sub="ativo ÷ total" insight={insights?.flowEfficiency} />
+        {isScrum ? (
+          <KpiCard label="Previsibilidade" value={Math.round((m.scrum?.sayDoRatioAvg ?? 0) * 100)} unit="%" sub="say-do ratio" insight={insights?.predictability} />
+        ) : (
+          <KpiCard label="Previsibilidade" value={f.deliveryCycleTime.p85} unit="d" sub={`SLE: 85% ≤ ${f.deliveryCycleTime.p85}d`} insight={insights?.predictability} />
+        )}
+      </div>
 
-      {/* CFD — assinatura */}
+      {/* 1 gráfico principal + leitura da IA */}
       <Card>
-        <CardHeader><CardTitle>Cumulative Flow Diagram (CFD)</CardTitle></CardHeader>
-        <CardContent><CFDChart stages={adv.cfd.stages} points={adv.cfd.points} /></CardContent>
+        <CardHeader><CardTitle>Cycle time — distribuição e tendência</CardTitle></CardHeader>
+        <CardContent>
+          <CycleScatter data={f.scatter} p50={f.deliveryCycleTime.median} p85={f.deliveryCycleTime.p85} />
+          {insights?.chart && (
+            <p className="mt-3 flex items-start gap-1.5 border-t border-border/60 pt-3 text-xs leading-snug text-foreground/80">
+              <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+              <span>{insights.chart}</span>
+            </p>
+          )}
+        </CardContent>
       </Card>
 
-      {/* Gráficos do método */}
-      <section className="grid gap-4 lg:grid-cols-2">
-        {isScrum && m.scrum ? (
-          <>
-            <Card><CardHeader><CardTitle>Velocity</CardTitle></CardHeader><CardContent><VelocityBar data={m.scrum.velocity} /></CardContent></Card>
-            <Card><CardHeader><CardTitle>Sprint burndown — {m.scrum.currentSprint?.name}</CardTitle></CardHeader><CardContent><BurndownLine data={m.scrum.burndown} /></CardContent></Card>
-          </>
-        ) : (
-          <>
-            <Card><CardHeader><CardTitle>Cycle time scatterplot</CardTitle></CardHeader><CardContent><CycleScatter data={f.scatter} p50={f.deliveryCycleTime.median} p85={f.deliveryCycleTime.p85} /></CardContent></Card>
-            <Card><CardHeader><CardTitle>Throughput por semana</CardTitle></CardHeader><CardContent><ThroughputBar series={f.throughput.series} /></CardContent></Card>
-          </>
+      {/* Métricas avançadas — secundário, recolhível */}
+      <div>
+        <button
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ChevronDown className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+          Métricas avançadas (flow) {showAdvanced ? "" : "— mostrar"}
+        </button>
+
+        {showAdvanced && (
+          <div className="mt-4 space-y-4">
+            <Card>
+              <CardHeader><CardTitle>Cumulative Flow Diagram (CFD)</CardTitle></CardHeader>
+              <CardContent><CFDChart stages={adv.cfd.stages} points={adv.cfd.points} /></CardContent>
+            </Card>
+            <section className="grid gap-4 lg:grid-cols-2">
+              <Card><CardHeader><CardTitle>Evolução (throughput · WIP · cycle time)</CardTitle></CardHeader><CardContent><TrendsChart data={adv.trends} /></CardContent></Card>
+              {isScrum && m.scrum ? (
+                <Card><CardHeader><CardTitle>Sprint burndown — {m.scrum.currentSprint?.name}</CardTitle></CardHeader><CardContent><BurndownLine data={m.scrum.burndown} /></CardContent></Card>
+              ) : (
+                <Card><CardHeader><CardTitle>Throughput por semana</CardTitle></CardHeader><CardContent><ThroughputBar series={f.throughput.series} /></CardContent></Card>
+              )}
+              <Card><CardHeader><CardTitle>Work item aging</CardTitle></CardHeader><CardContent><AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} /></CardContent></Card>
+              <Card><CardHeader><CardTitle>Cycle time histogram</CardTitle></CardHeader><CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /></CardContent></Card>
+              {isScrum && m.scrum && (
+                <Card><CardHeader><CardTitle>Velocity</CardTitle></CardHeader><CardContent><VelocityBar data={m.scrum.velocity} /></CardContent></Card>
+              )}
+            </section>
+          </div>
         )}
-      </section>
-
-      {/* Aging + Histograma */}
-      <section className="grid gap-4 lg:grid-cols-2">
-        <Card><CardHeader><CardTitle>Work item aging</CardTitle></CardHeader><CardContent><AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} /></CardContent></Card>
-        <Card><CardHeader><CardTitle>Cycle time histogram</CardTitle></CardHeader><CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /></CardContent></Card>
-      </section>
-
-      {/* Evolução + WIP por estágio */}
-      <section className="grid gap-4 lg:grid-cols-2">
-        <Card><CardHeader><CardTitle>Evolução (throughput · WIP · cycle time)</CardTitle></CardHeader><CardContent><TrendsChart data={adv.trends} /></CardContent></Card>
-        <Card><CardHeader><CardTitle>WIP por estágio (dual-track)</CardTitle></CardHeader><CardContent><StageBar data={f.stageDistribution} /></CardContent></Card>
-      </section>
+      </div>
     </div>
   );
 }

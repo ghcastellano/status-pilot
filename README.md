@@ -22,11 +22,14 @@ Jira Cloud (workflows + issues, tudo criado via API)
 
 > **Nota honesta (build-in-public):** um Jira criado hoje não tem histórico de
 > transições — o `created` e o changelog são read-only na API e **não podem ser
-> backdatados**. Por isso a *timeline de cada estágio* é sintética: vai embutida
-> em cada issue (bloco `SPMETA`, num painel recolhível na descrição) e o sync a
-> lê de volta da API. As issues, board, colunas, sprints e épicos são **reais e
-> criados via API**. O mesmo código passaria a calcular cycle times reais assim
-> que o board acumulasse semanas de uso de verdade.
+> backdatados**. Por isso a *timeline de cada estágio é sintética*: cada marco é
+> gravado em **campos de data reais do Jira** (filtráveis por JQL) + um bloco
+> `SPMETA` recolhível, e o sync lê de volta da API. A timeline cobre ~8 semanas
+> com **variação temporal realista** (ex.: gargalo emergente em Code Review →
+> cycle time sobe, throughput cai) para que os gráficos de tendência e o insight
+> da IA façam sentido. As issues, board, colunas, sprints e épicos são **reais e
+> criados via API**; só a linha do tempo é sintética (rotulada na UI). O mesmo
+> código passaria a calcular cycle times reais com semanas de uso de verdade.
 
 ## Stack
 - **Next.js 14** (App Router) — frontend + API routes serverless

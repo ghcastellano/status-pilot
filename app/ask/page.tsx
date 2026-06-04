@@ -10,10 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 const EXAMPLES = [
-  "Como está a previsibilidade do time?",
-  "Qual o cycle time de entrega?",
-  "Temos algum gargalo no fluxo?",
-  "Onde o trabalho mais espera?",
+  "Qual time tem melhor cycle time?",
+  "Compare a previsibilidade dos dois times.",
+  "Onde está o maior gargalo agora?",
+  "Algum time com throughput caindo?",
 ];
 
 export default function AskPage() {
@@ -53,8 +53,9 @@ export default function AskPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Perguntar</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Pergunte em linguagem natural — a IA responde a partir dos dados de{" "}
-          <span className="font-medium">{selectedTeam?.name}</span> (lidos do Jira).
+          Pergunte em linguagem natural — a IA responde considerando{" "}
+          <span className="font-medium">os dois times</span> (Espresso e Cold Brew), lidos do Jira.
+          Dá pra comparar.
         </p>
       </div>
 
