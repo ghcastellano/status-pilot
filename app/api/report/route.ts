@@ -9,7 +9,7 @@ import { generateReport } from "@/lib/llm";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const REPORT_KEY = "__status_report__";
+const REPORT_KEY = "__status_report_v2__";
 
 export async function POST(req: NextRequest) {
   let body: any;
@@ -18,14 +18,16 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
-  const { teamId, sessionId } = body ?? {};
+  const { teamId, sessionId, force } = body ?? {};
   if (!isValidTeamId(teamId)) {
     return NextResponse.json({ error: "Time inválido." }, { status: 400 });
   }
 
   try {
-    const cached = await getCachedAnswer(teamId, REPORT_KEY);
-    if (cached) return NextResponse.json({ report: cached, cached: true });
+    if (!force) {
+      const cached = await getCachedAnswer(teamId, REPORT_KEY);
+      if (cached) return NextResponse.json({ report: cached, cached: true });
+    }
 
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
     const rl = await checkRateLimit(bucketFrom(ip, sessionId ?? null));
