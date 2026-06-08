@@ -127,25 +127,62 @@ export async function generateMetricInsights(bundle: AnalysisBundle): Promise<Me
   }
 }
 
-/** Responde considerando TODOS os times (snapshots de cada um). */
-export async function answerAcrossTeams(list: TeamMetrics[], question: string): Promise<string> {
-  const snaps = list
-    .map((m) => `### Time ${m.team.name} (${m.team.board_type})\n${buildSnapshot(m)}`)
-    .join("\n\n");
+/** contexto combinado bundle + scrum para a IA cruzar com o dashboard */
+function buildTeamContext(m: TeamMetrics, bundle: AnalysisBundle): object {
+  return {
+    time: bundle.team,
+    metodo: bundle.method,
+    cycleTime: bundle.cycleTime,
+    throughput: bundle.throughput,
+    flowEfficiencyPct: bundle.flowEfficiencyPct,
+    predictability: bundle.predictability,
+    wip: m.flow.wip,
+    wip_por_estagio: m.flow.stageDistribution.map((s) => `${s.stage}: ${s.count}`),
+    byEpic: bundle.byEpic,
+    byStage: bundle.byStage,
+    outliers: bundle.outliers.slice(0, 6),
+    agingHotspot: bundle.agingHotspot,
+    ...(m.scrum
+      ? {
+          scrum: {
+            avgVelocity: m.scrum.avgVelocity,
+            velocityStdev: m.scrum.velocityStdev,
+            sayDoRatioPct: Math.round(m.scrum.sayDoRatioAvg * 100),
+            currentSprint: m.scrum.currentSprint,
+            recentVelocity: m.scrum.velocity.slice(-4),
+          },
+        }
+      : {}),
+  };
+}
+
+/** Responde considerando TODOS os times com os dados completos do dashboard. */
+export async function answerAcrossTeams(
+  list: { metrics: TeamMetrics; bundle: AnalysisBundle }[],
+  question: string
+): Promise<string> {
+  const context = list
+    .map(({ metrics, bundle }) =>
+      `### Time: ${bundle.team} (${bundle.method})\n` +
+      JSON.stringify(buildTeamContext(metrics, bundle), null, 2)
+    )
+    .join("\n\n---\n\n");
+
   const res = await getClient().chat.completions.create({
     model: MODEL,
     temperature: 0.2,
-    max_tokens: 600,
+    max_tokens: 800,
     messages: [
       {
         role: "system",
         content:
           GROUNDING +
-          " Você recebe os SNAPSHOTS de TODOS os times. Considere todos ao responder e " +
-          "compare entre eles quando fizer sentido. Se a pergunta for sobre um time específico, " +
-          "foque nele.",
+          " Você recebe os dados completos de TODOS os times (mesmos dados exibidos no dashboard: " +
+          "cycle time, throughput, flow efficiency, WIP, análise por épico, por estágio, outliers, aging). " +
+          "Compare entre eles quando fizer sentido. Se a pergunta for sobre um time específico, foque nele. " +
+          "Cite números concretos do contexto fornecido — nunca invente.",
       },
-      { role: "system", content: `SNAPSHOTS:\n${snaps}` },
+      { role: "system", content: `DADOS DOS TIMES:\n${context}` },
       { role: "user", content: question },
     ],
   });

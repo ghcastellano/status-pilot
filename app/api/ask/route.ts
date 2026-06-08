@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTeams, fetchTeamData } from "@/lib/data";
-import { computeTeamMetrics } from "@/lib/metrics";
+import { computeTeamMetrics, computeAnalysisBundle } from "@/lib/metrics";
 import { validateQuestion, normalizeForCache, isValidTeamId } from "@/lib/validate";
 import { checkRateLimit, bucketFrom, RATE_LIMIT } from "@/lib/rate-limit";
 import { getCachedAnswer, setCachedAnswer } from "@/lib/cache";
@@ -25,8 +25,8 @@ export async function POST(req: NextRequest) {
   if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
 
   try {
-    // 1) cache primeiro — hit não gasta LLM nem cota
-    const norm = normalizeForCache(v.value);
+    // 1) cache primeiro — hit não gasta LLM nem cota (chave versionada: v2_)
+    const norm = "v2_" + normalizeForCache(v.value);
     const cached = await getCachedAnswer(teamId, norm);
     if (cached) return NextResponse.json({ answer: cached, cached: true });
 
@@ -40,14 +40,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3) métricas de TODOS os times + LLM sobre os snapshots combinados
+    // 3) bundle rico de TODOS os times (mesmos dados que o dashboard exibe)
     const teams = await fetchTeams();
-    const list = [];
+    const list: Parameters<typeof answerAcrossTeams>[0] = [];
     for (const t of teams) {
       const { team, sprints, issues, epics } = await fetchTeamData(t.id);
       if (!team) continue;
       const epicNames = Object.fromEntries(epics.map((e) => [e.epic_key, e.name]));
-      list.push(computeTeamMetrics(team, sprints, issues, { epicNames }));
+      const metrics = computeTeamMetrics(team, sprints, issues, { epicNames });
+      const bundle = computeAnalysisBundle(metrics, issues, epicNames);
+      list.push({ metrics, bundle });
     }
     const answer = await answerAcrossTeams(list, v.value);
 
