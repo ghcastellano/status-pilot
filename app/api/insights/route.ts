@@ -8,7 +8,7 @@ import { generateMetricInsights } from "@/lib/llm";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const INSIGHT_KEY = "__insight__";
+const INSIGHT_KEY = "__insight_v2__";
 const EMPTY = { cycleTime: "", secondary: "", flowEfficiency: "", predictability: "", chart: "" };
 
 export async function POST(req: NextRequest) {
@@ -18,12 +18,17 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
-  const teamId = body?.teamId;
+  const { teamId, epic, type, weeks, sprintId } = body ?? {};
   if (!isValidTeamId(teamId)) {
     return NextResponse.json({ error: "Time inválido." }, { status: 400 });
   }
+
+  // chave de cache inclui filtros — cada combinação tem seu próprio insight
+  const filterSuffix = [epic ?? "all", type ?? "all", String(weeks ?? 12), sprintId ?? "all"].join("|");
+  const cacheKey = `${INSIGHT_KEY}_${filterSuffix}`;
+
   try {
-    const cached = await getCachedAnswer(teamId, INSIGHT_KEY);
+    const cached = await getCachedAnswer(teamId, cacheKey);
     if (cached) {
       try {
         return NextResponse.json({ insights: JSON.parse(cached), cached: true });
@@ -35,13 +40,19 @@ export async function POST(req: NextRequest) {
     const { team, sprints, issues, epics } = await fetchTeamData(teamId);
     if (!team) return NextResponse.json({ insights: EMPTY, cached: false });
     const epicNames = Object.fromEntries(epics.map((e) => [e.epic_key, e.name]));
-    const metrics = computeTeamMetrics(team, sprints, issues, { epicNames });
+    const metrics = computeTeamMetrics(team, sprints, issues, {
+      epicNames,
+      epic: epic && epic !== "all" ? epic : undefined,
+      type: type && type !== "all" ? type : undefined,
+      weeks: weeks ? Number(weeks) : 12,
+      sprintId: sprintId && sprintId !== "all" ? sprintId : undefined,
+    });
     const bundle = computeAnalysisBundle(metrics, issues, epicNames);
     const insights = await generateMetricInsights(bundle);
 
     // só cacheia se veio conteúdo (não cacheia fallback vazio → próximo load tenta de novo)
     if (Object.values(insights).some((v) => v)) {
-      await setCachedAnswer(teamId, INSIGHT_KEY, JSON.stringify(insights));
+      await setCachedAnswer(teamId, cacheKey, JSON.stringify(insights));
     }
     return NextResponse.json({ insights, cached: false });
   } catch (e) {

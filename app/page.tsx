@@ -48,7 +48,7 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [selectedTeam, epic, type, weeks, sprint, refresh]);
 
-  // insight automático (separado, cacheado por time)
+  // insight automático — refaz sempre que time ou filtros mudam
   React.useEffect(() => {
     if (!selectedTeam) return;
     setInsightLoading(true);
@@ -56,13 +56,19 @@ export default function DashboardPage() {
     fetch("/api/insights", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teamId: selectedTeam.id }),
+      body: JSON.stringify({
+        teamId: selectedTeam.id,
+        epic: epic !== "all" ? epic : undefined,
+        type: type !== "all" ? type : undefined,
+        weeks: Number(weeks),
+        sprintId: sprint !== "all" ? sprint : undefined,
+      }),
     })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => setInsights(d.insights))
       .catch(() => setInsights(null))
       .finally(() => setInsightLoading(false));
-  }, [selectedTeam, refresh]);
+  }, [selectedTeam, epic, type, weeks, sprint, refresh]);
 
   React.useEffect(() => {
     setEpic("all");
