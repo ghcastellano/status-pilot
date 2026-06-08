@@ -25,6 +25,7 @@ export default function DashboardPage() {
   const [epic, setEpic] = React.useState("all");
   const [type, setType] = React.useState("all");
   const [weeks, setWeeks] = React.useState("12");
+  const [sprint, setSprint] = React.useState("all");
   const [syncing, setSyncing] = React.useState(false);
   const [refresh, setRefresh] = React.useState(0);
   const [syncMsg, setSyncMsg] = React.useState<string | null>(null);
@@ -39,12 +40,13 @@ export default function DashboardPage() {
     const qs = new URLSearchParams({ teamId: selectedTeam.id, weeks });
     if (epic !== "all") qs.set("epic", epic);
     if (type !== "all") qs.set("type", type);
+    if (sprint !== "all") qs.set("sprintId", sprint);
     fetch(`/api/metrics?${qs}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : r.json().then((e) => Promise.reject(new Error(e.error)))))
       .then(setM)
       .catch((e) => setErr(e.message))
       .finally(() => setLoading(false));
-  }, [selectedTeam, epic, type, weeks, refresh]);
+  }, [selectedTeam, epic, type, weeks, sprint, refresh]);
 
   // insight automático (separado, cacheado por time)
   React.useEffect(() => {
@@ -65,6 +67,7 @@ export default function DashboardPage() {
   React.useEffect(() => {
     setEpic("all");
     setType("all");
+    setSprint("all");
   }, [selectedTeam?.id]);
 
   async function doSync() {
@@ -130,10 +133,24 @@ export default function DashboardPage() {
               {m.availableFilters.types.map((t: string) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={weeks} onValueChange={setWeeks}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-            <SelectContent>{PERIODS.map((p) => <SelectItem key={p.v} value={p.v}>{p.label}</SelectItem>)}</SelectContent>
-          </Select>
+          {isScrum ? (
+            <Select value={sprint} onValueChange={setSprint}>
+              <SelectTrigger className="w-40"><SelectValue placeholder="Sprint" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os sprints</SelectItem>
+                {(m.scrum?.sprints ?? []).map((s: { id: string; name: string; state: string }) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}{s.state === "active" ? " ●" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Select value={weeks} onValueChange={setWeeks}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>{PERIODS.map((p) => <SelectItem key={p.v} value={p.v}>{p.label}</SelectItem>)}</SelectContent>
+            </Select>
+          )}
           <Button variant="outline" onClick={doSync} disabled={syncing}>
             <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
             {syncing ? "Sincronizando…" : "Sincronizar"}

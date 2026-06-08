@@ -92,12 +92,12 @@ export function VelocityBar({ data }: { data: { sprint: string; committed: numbe
   return (
     <Box>
       <ResponsiveContainer>
-        <BarChart data={data} margin={{ top: 8, right: 8, bottom: 24, left: 8 }}>
+        <BarChart data={data} margin={{ top: 32, right: 8, bottom: 24, left: 8 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis dataKey="sprint" {...axis} label={xLabel("Sprint")} />
           <YAxis {...axis} width={44} label={yLabel("Story points")} />
           <Tooltip {...tip} cursor={{ fill: "rgba(47,143,122,0.08)" }} formatter={(v: any, n: any) => [`${v} pts`, n]} />
-          <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" />
+          <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" verticalAlign="top" />
           <Bar dataKey="committed" name="Committed" fill={MUTED} radius={[4, 4, 0, 0]} maxBarSize={28} />
           <Bar dataKey="completed" name="Completed" fill={ACCENT} radius={[4, 4, 0, 0]} maxBarSize={28} />
         </BarChart>
@@ -111,12 +111,12 @@ export function BurndownLine({ data }: { data: { date: string; ideal: number; ac
   return (
     <Box>
       <ResponsiveContainer>
-        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 24, left: 8 }}>
+        <LineChart data={data} margin={{ top: 32, right: 12, bottom: 24, left: 8 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis dataKey="date" {...axis} tickFormatter={(v) => new Date(v).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} minTickGap={24} label={xLabel("Dia da sprint")} />
           <YAxis {...axis} width={44} label={yLabel("Pontos restantes")} />
           <Tooltip {...tip} labelFormatter={(v) => new Date(v).toLocaleDateString("pt-BR")} formatter={(v: any, n: any) => [`${v} pts`, n]} />
-          <Legend wrapperStyle={{ fontSize: 11 }} iconType="plainline" />
+          <Legend wrapperStyle={{ fontSize: 11 }} iconType="plainline" verticalAlign="top" />
           <Line type="monotone" dataKey="ideal" name="Ideal" stroke={MUTED} strokeDasharray="5 5" dot={false} strokeWidth={1.5} />
           <Line type="monotone" dataKey="actual" name="Real" stroke={ACCENT} dot={false} strokeWidth={2.5} connectNulls />
         </LineChart>

@@ -218,6 +218,7 @@ export interface ScrumMetrics {
     daysElapsed: number; daysTotal: number;
   } | null;
   burndown: BurndownPoint[];
+  sprints: { id: string; name: string; state: "active" | "closed" | "future" }[];
 }
 
 function completedWithin(sprint: SprintRow, issues: IssueRow[]): number {
@@ -265,7 +266,8 @@ export function computeScrum(sprints: SprintRow[], issues: IssueRow[], now: numb
       });
     }
   }
-  return { avgVelocity: round1(avgVelocity), velocityStdev: round1(Math.sqrt(variance)), velocity, sayDoRatioAvg, currentSprint, burndown };
+  const sprintList = ordered.map((s) => ({ id: s.id, name: s.name, state: s.state }));
+  return { avgVelocity: round1(avgVelocity), velocityStdev: round1(Math.sqrt(variance)), velocity, sayDoRatioAvg, currentSprint, burndown, sprints: sprintList };
 }
 
 // ── AVANÇADO (estilo eazyBI / Actionable Agile — construído por nós) ──
@@ -360,7 +362,7 @@ function computeAdvanced(issues: IssueRow[], now: number, weeks: number): Advanc
   };
 }
 
-export interface FilterOptions { epic?: string | null; type?: string | null; weeks?: number }
+export interface FilterOptions { epic?: string | null; type?: string | null; weeks?: number; sprintId?: string | null }
 
 export interface TeamMetrics {
   team: TeamRow;
@@ -368,7 +370,7 @@ export interface TeamMetrics {
   scrum: ScrumMetrics | null;
   advanced: AdvancedMetrics;
   totals: { issues: number; epics: number };
-  appliedFilters: { epic: string | null; type: string | null; weeks: number };
+  appliedFilters: { epic: string | null; type: string | null; weeks: number; sprintId: string | null };
   availableFilters: { epics: { key: string; name: string }[]; types: string[] };
 }
 
@@ -388,23 +390,28 @@ export function computeTeamMetrics(
     types: Array.from(new Set(allTeam.map((i) => i.type))).sort(),
   };
 
-  // aplica filtros
+  // aplica filtros por épico e tipo
   let ti = allTeam;
   if (opts.epic) ti = ti.filter((i) => i.epic_key === opts.epic);
   if (opts.type) ti = ti.filter((i) => i.type === opts.type);
 
+  // filtro de sprint: apenas para métricas de fluxo (não afeta histórico de velocity/say-do)
+  const flowIssues = (opts.sprintId && team.board_type === "scrum")
+    ? ti.filter((i) => i.sprint_id === opts.sprintId)
+    : ti;
+
   const now = referenceNow(allTeam);
-  const flow = computeFlow(ti, now, weeks);
-  const advanced = computeAdvanced(ti, now, weeks);
+  const flow = computeFlow(flowIssues, now, weeks);
+  const advanced = computeAdvanced(flowIssues, now, weeks);
   const scrum = team.board_type === "scrum"
     ? computeScrum(sprints.filter((s) => s.team_id === team.id), ti, now)
     : null;
-  const epics = new Set(ti.map((i) => i.epic_key).filter(Boolean)).size;
+  const epics = new Set(flowIssues.map((i) => i.epic_key).filter(Boolean)).size;
 
   return {
     team, flow, scrum, advanced,
-    totals: { issues: ti.length, epics },
-    appliedFilters: { epic: opts.epic ?? null, type: opts.type ?? null, weeks },
+    totals: { issues: flowIssues.length, epics },
+    appliedFilters: { epic: opts.epic ?? null, type: opts.type ?? null, weeks, sprintId: opts.sprintId ?? null },
     availableFilters,
   };
 }

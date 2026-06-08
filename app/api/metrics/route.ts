@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
       type: p.get("type"),
       weeks,
       epicNames,
+      sprintId: p.get("sprintId"),
     });
     return NextResponse.json(metrics);
   } catch (e) {

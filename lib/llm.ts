@@ -4,7 +4,7 @@
  * dele. A IA não toca no banco — recebe só o snapshot determinístico.
  */
 import OpenAI from "openai";
-import type { TeamMetrics, AnalysisBundle } from "./metrics";
+import type { TeamMetrics, AnalysisBundle, ScrumMetrics } from "./metrics";
 
 let client: OpenAI | null = null;
 function getClient(): OpenAI {
@@ -152,23 +152,64 @@ export async function answerAcrossTeams(list: TeamMetrics[], question: string): 
   return res.choices[0]?.message?.content?.trim() ?? "Não consegui responder.";
 }
 
-export async function generateReport(m: TeamMetrics): Promise<string> {
+export async function generateReport(
+  bundle: AnalysisBundle,
+  scrum: ScrumMetrics | null,
+): Promise<string> {
+  const isScrumMethod = bundle.method === "scrum";
+  const sprintSection = isScrumMethod ? "'## Sprint atual'" : "'## Trabalho em andamento'";
+
+  const systemPrompt =
+    "Você é um analista de fluxo ágil sênior. Gere um STATUS REPORT executivo em português do Brasil, " +
+    "pronto para copiar e enviar a stakeholders. Use SOMENTE os dados do bundle fornecido — nunca invente números. " +
+    "Tom profissional, sóbrio, sem hype. Termos técnicos em inglês (cycle time, throughput, WIP, lead time, etc.). " +
+    "Markdown simples (## para seções, **negrito** para números-chave, listas com -).\n\n" +
+    "Estruture EXATAMENTE nas seções abaixo (use ## como cabeçalho):\n" +
+    "## TL;DR — 2-3 frases executivas com os 2-3 números mais importantes do período.\n" +
+    "## Saúde do fluxo — cycle time (mediana + p85), throughput/velocity, flow efficiency, WIP atual e tendência.\n" +
+    `${sprintSection} — ` +
+    (isScrumMethod
+      ? "sprint em andamento: committed, completed até agora, say-do ratio histórico."
+      : "distribuição de itens por estágio, gargalo aparente.") + "\n" +
+    "## Análise por épico — top épicos em cycle time: nome, mediana, p85; destaque qual é o mais lento e por quê.\n" +
+    "## Itens em risco — aging: liste até 5 itens com mais dias no estágio (nome, estágio, dias); marque os acima do p85.\n" +
+    "## Pontos de atenção — outliers de cycle time, estágios com tempo crescente (compare recentDays vs priorDays), gargalos.\n" +
+    "## Próximos passos — 2-3 ações concretas, específicas e baseadas nos dados acima (não genéricas).";
+
   const res = await getClient().chat.completions.create({
     model: MODEL,
     temperature: 0.3,
-    max_tokens: 700,
+    max_tokens: 1400,
     messages: [
-      { role: "system", content: GROUNDING },
+      { role: "system", content: systemPrompt },
       {
-        role: "system",
+        role: "user",
         content:
-          "Gere um STATUS REPORT executivo para stakeholders, em português, pronto para " +
-          "copiar. Estruture em seções curtas com estes títulos: 'TL;DR', 'Saúde do fluxo', " +
-          (m.team.board_type === "scrum" ? "'Sprint atual', " : "'Trabalho em andamento', ") +
-          "'Pontos de atenção', 'Próximos passos'. Use os números do snapshot. Tom " +
-          "profissional e sóbrio, sem hype. Markdown simples.",
+          `BUNDLE de análise — time: ${bundle.team} (${bundle.method})\n` +
+          JSON.stringify(
+            {
+              cycleTime: bundle.cycleTime,
+              throughput: bundle.throughput,
+              flowEfficiencyPct: bundle.flowEfficiencyPct,
+              predictability: bundle.predictability,
+              byEpic: bundle.byEpic,
+              byStage: bundle.byStage,
+              outliers: bundle.outliers.slice(0, 6),
+              agingHotspot: bundle.agingHotspot,
+              scrum: scrum
+                ? {
+                    avgVelocity: scrum.avgVelocity,
+                    velocityStdev: scrum.velocityStdev,
+                    sayDoRatioPct: Math.round(scrum.sayDoRatioAvg * 100),
+                    currentSprint: scrum.currentSprint,
+                    recentVelocity: scrum.velocity.slice(-4),
+                  }
+                : null,
+            },
+            null,
+            2,
+          ),
       },
-      { role: "user", content: `SNAPSHOT do time ${m.team.name}:\n${buildSnapshot(m)}` },
     ],
   });
   return res.choices[0]?.message?.content?.trim() ?? "Não consegui gerar o report.";

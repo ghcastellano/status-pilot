@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTeamData } from "@/lib/data";
-import { computeTeamMetrics } from "@/lib/metrics";
+import { computeTeamMetrics, computeAnalysisBundle } from "@/lib/metrics";
 import { isValidTeamId } from "@/lib/validate";
 import { checkRateLimit, bucketFrom, RATE_LIMIT } from "@/lib/rate-limit";
 import { getCachedAnswer, setCachedAnswer } from "@/lib/cache";
@@ -36,10 +36,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { team, sprints, issues } = await fetchTeamData(teamId);
+    const { team, sprints, issues, epics } = await fetchTeamData(teamId);
     if (!team) return NextResponse.json({ error: "Time não encontrado." }, { status: 404 });
-    const metrics = computeTeamMetrics(team, sprints, issues);
-    const report = await generateReport(metrics);
+    const epicNames = Object.fromEntries(epics.map((e) => [e.epic_key, e.name]));
+    const metrics = computeTeamMetrics(team, sprints, issues, { epicNames });
+    const bundle = computeAnalysisBundle(metrics, issues, epicNames);
+    const report = await generateReport(bundle, metrics.scrum);
 
     await setCachedAnswer(teamId, REPORT_KEY, report);
     return NextResponse.json({ report, cached: false, remaining: rl.remaining });
