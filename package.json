@@ -15,6 +15,7 @@
     "jira:restage": "tsx scripts/restage-jira.ts",
     "db:schema": "tsx scripts/apply-schema.ts",
     "db:sync": "tsx scripts/sync-jira-to-supabase.ts",
+    "db:replay": "tsx scripts/replay-maturity-history.ts",
     "test:reconcile": "tsx scripts/test-reconcile.ts"
   },
   "dependencies": {

@@ -4,6 +4,10 @@
 -- Idempotente: seguro re-rodar.
 -- ─────────────────────────────────────────────────────────────
 
+drop table if exists coaching_experiments cascade;
+drop table if exists coaching_assessments cascade;
+drop table if exists coaching_plans cascade;
+drop table if exists metrics_history cascade;
 drop table if exists qa_cache cascade;
 drop table if exists rate_limits cascade;
 drop table if exists issues cascade;
@@ -91,3 +95,57 @@ create table rate_limits (
   count         int not null default 0,
   window_start  timestamptz not null default now()
 );
+
+-- ─────────────────────────────────────────────────────────────
+-- Coaching Hub — maturidade dual (Scrum/Kanban)
+-- ─────────────────────────────────────────────────────────────
+
+-- Histórico de maturidade: 1 snapshot por time por semana (replay da timeline
+-- sintética + snapshots futuros). `metrics` guarda o MaturityResult inteiro,
+-- permitindo re-derivar tiers após recalibração de thresholds sem re-replay.
+create table metrics_history (
+  team_id      text not null references teams(id) on delete cascade,
+  as_of        date not null,               -- data de corte do snapshot
+  board_type   text not null check (board_type in ('scrum','kanban')),
+  tier         int check (tier in (1,2,3)), -- null = sem dados suficientes
+  metrics      jsonb not null default '{}'::jsonb,  -- MaturityResult completo
+  computed_at  timestamptz not null default now(),
+  primary key (team_id, as_of)
+);
+create index metrics_history_team_idx on metrics_history(team_id, as_of desc);
+
+-- Plano de coaching: 1 por time (gap, hipótese, próximo passo, ask, check-in)
+create table coaching_plans (
+  team_id     text primary key references teams(id) on delete cascade,
+  coaching    boolean not null default true,
+  coach       text,
+  engaged_at  timestamptz,
+  main_gap    text,
+  hypothesis  text,
+  next_step   text,
+  ask         text,                          -- onde a liderança pode ajudar
+  review_at   date,                          -- próximo check-in
+  updated_at  timestamptz not null default now()
+);
+
+-- Sinais comportamentais (pilar Ownership): última avaliação por time
+create table coaching_assessments (
+  team_id     text primary key references teams(id) on delete cascade,
+  signals     jsonb not null default '{}'::jsonb, -- {key: not_yet|emerging|consistent}
+  note        text,
+  updated_at  timestamptz not null default now()
+);
+
+-- Experimentos / intervenções de coaching
+create table coaching_experiments (
+  id          bigint generated always as identity primary key,
+  team_id     text not null references teams(id) on delete cascade,
+  pillar      text not null check (pillar in ('flow','quality','ownership')),
+  metric      text,                          -- métrica a mover
+  behavior    text not null,                 -- o comportamento a testar
+  hypothesis  text,
+  outcome     text,                          -- resultado observado
+  status      text not null default 'active' check (status in ('active','done','dropped')),
+  created_at  timestamptz not null default now()
+);
+create index coaching_experiments_team_idx on coaching_experiments(team_id, created_at desc);

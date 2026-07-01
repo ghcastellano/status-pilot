@@ -120,6 +120,8 @@ export interface FlowMetrics {
   leadTime: CtStat;
   flowEfficiency: number; // 0..1
   throughput: { perWeekAvg: number; series: { weekLabel: string; weekStart: string; count: number }[] };
+  throughputCV: number | null; // estabilidade do throughput semanal (stdev/avg, valor cru)
+  bugRatio: number; // % de issues type='bug' — proxy de rework p/ o pilar Quality
   wip: number; // tudo em fluxo (fora do funil e de Live/Done)
   deliveryWip: number; // só estágios de delivery (In Progress → Ready for Release)
   stageDistribution: StageCount[];
@@ -172,6 +174,13 @@ export function computeFlow(issues: IssueRow[], now: number, weeks = 8): FlowMet
   }
   const perWeekAvg = round1(series.reduce((a, b) => a + b.count, 0) / (series.length || 1));
 
+  // Throughput stability (CV) — cadência semanal; valor cru, guard avg=0.
+  const tpCounts = series.map((s) => s.count);
+  const tpVar = tpCounts.length ? tpCounts.reduce((a, c) => a + (c - perWeekAvg) ** 2, 0) / tpCounts.length : 0;
+  const throughputCV = tpCounts.length >= 3 && perWeekAvg > 0 ? Math.sqrt(tpVar) / perWeekAvg : null;
+  // Bug ratio — proxy de rework p/ o pilar Quality (rework real bloqueado em changelog ingestion).
+  const bugRatio = issues.length ? Math.round((issues.filter((i) => i.type === "bug").length / issues.length) * 100) : 0;
+
   // distribuição por estágio atual (exclui Live/Done — foco no fluxo ativo)
   const dist = new Map<string, { count: number; kind: string }>();
   for (const i of issues) {
@@ -191,6 +200,8 @@ export function computeFlow(issues: IssueRow[], now: number, weeks = 8): FlowMet
     leadTime: intervalStats(issues, "created_at", "released_at"),
     flowEfficiency: flowEfficiency(issues),
     throughput: { perWeekAvg, series },
+    throughputCV,
+    bugRatio,
     // WIP = tudo "em fluxo": fora do funil (Opportunity Backlog) e de Live/Done.
     wip: issues.filter(
       (i) =>
@@ -210,6 +221,8 @@ export interface BurndownPoint { day: number; date: string; ideal: number; actua
 export interface ScrumMetrics {
   avgVelocity: number;
   velocityStdev: number;
+  velocityCV: number | null; // Sprint Predictability: CV (stdev/avg) das últimas ~6 closed sprints
+  closedSprintCount: number; // p/ flag de baixa confiança quando < 6
   velocity: VelocityPoint[];
   sayDoRatioAvg: number;
   currentSprint: {
@@ -237,6 +250,12 @@ export function computeScrum(sprints: SprintRow[], issues: IssueRow[], now: numb
   const cv = closed.map((s) => completedWithin(s, issues));
   const avgVelocity = cv.length ? cv.reduce((a, b) => a + b, 0) / cv.length : 0;
   const variance = cv.length ? cv.reduce((a, v) => a + (v - avgVelocity) ** 2, 0) / cv.length : 0;
+  // Sprint Predictability — CV das últimas ~6 closed sprints, do valor CRU (sem round1),
+  // para não perder precisão perto do boundary 0.15. null se n<3 ou avg=0.
+  const recentClosedPts = cv.slice(-6);
+  const rcAvg = recentClosedPts.length ? recentClosedPts.reduce((a, b) => a + b, 0) / recentClosedPts.length : 0;
+  const rcVar = recentClosedPts.length ? recentClosedPts.reduce((a, v) => a + (v - rcAvg) ** 2, 0) / recentClosedPts.length : 0;
+  const velocityCV = recentClosedPts.length >= 3 && rcAvg > 0 ? Math.sqrt(rcVar) / rcAvg : null;
   const sd = closed.map((s) => completedWithin(s, issues) / s.committed_points);
   const sayDoRatioAvg = sd.length ? Math.round((sd.reduce((a, b) => a + b, 0) / sd.length) * 100) / 100 : 0;
 
@@ -267,7 +286,7 @@ export function computeScrum(sprints: SprintRow[], issues: IssueRow[], now: numb
     }
   }
   const sprintList = ordered.map((s) => ({ id: s.id, name: s.name, state: s.state }));
-  return { avgVelocity: round1(avgVelocity), velocityStdev: round1(Math.sqrt(variance)), velocity, sayDoRatioAvg, currentSprint, burndown, sprints: sprintList };
+  return { avgVelocity: round1(avgVelocity), velocityStdev: round1(Math.sqrt(variance)), velocityCV, closedSprintCount: closed.length, velocity, sayDoRatioAvg, currentSprint, burndown, sprints: sprintList };
 }
 
 // ── AVANÇADO (estilo eazyBI / Actionable Agile — construído por nós) ──
@@ -362,7 +381,7 @@ function computeAdvanced(issues: IssueRow[], now: number, weeks: number): Advanc
   };
 }
 
-export interface FilterOptions { epic?: string | null; type?: string | null; weeks?: number; sprintId?: string | null }
+export interface FilterOptions { epic?: string | null; type?: string | null; weeks?: number; sprintId?: string | null; asOf?: number }
 
 export interface TeamMetrics {
   team: TeamRow;
@@ -400,7 +419,7 @@ export function computeTeamMetrics(
     ? ti.filter((i) => i.sprint_id === opts.sprintId)
     : ti;
 
-  const now = referenceNow(allTeam);
+  const now = opts.asOf ?? referenceNow(allTeam);
   const flow = computeFlow(flowIssues, now, weeks);
   const advanced = computeAdvanced(flowIssues, now, weeks);
   const scrum = team.board_type === "scrum"
