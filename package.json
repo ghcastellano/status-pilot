@@ -16,6 +16,7 @@
     "db:schema": "tsx scripts/apply-schema.ts",
     "db:sync": "tsx scripts/sync-jira-to-supabase.ts",
     "db:replay": "tsx scripts/replay-maturity-history.ts",
+    "db:seed:coaching": "tsx scripts/seed-coaching-demo.ts",
     "test:reconcile": "tsx scripts/test-reconcile.ts"
   },
   "dependencies": {

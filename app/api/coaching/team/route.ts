@@ -3,6 +3,7 @@ import { fetchTeamData } from "@/lib/data";
 import { computeTeamMetrics } from "@/lib/metrics";
 import { computeMaturity } from "@/lib/maturity";
 import { fetchHistory, fetchPlan, fetchAssessment, fetchExperiments } from "@/lib/coaching-db";
+import { classifyEngagement } from "@/lib/coaching";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,13 @@ export async function GET(req: NextRequest) {
     ]);
     const epicNames = Object.fromEntries(epics.map((e) => [e.epic_key, e.name]));
     const metrics = computeTeamMetrics(team, sprints, issues, { weeks: 12, epicNames });
+    const maturity = computeMaturity(metrics);
+    const coaching = plan ? plan.coaching : true;
+    const status = classifyEngagement({
+      tier: maturity.tier,
+      historyTiers: history.map((h) => h.tier),
+      coaching,
+    });
     return NextResponse.json({
       team: {
         id: team.id,
@@ -34,7 +42,9 @@ export async function GET(req: NextRequest) {
         board_type: team.board_type,
         description: team.description,
       },
-      maturity: computeMaturity(metrics),
+      maturity,
+      status,
+      coach: plan?.coach ?? null,
       history,
       plan,
       assessment,

@@ -53,6 +53,12 @@ export const PILLAR_LABEL: Record<Pillar, string> = {
   ownership: "Ownership (comportamental)",
 };
 
+export const PILLAR_SHORT: Record<Pillar, string> = {
+  flow: "Flow",
+  quality: "Quality",
+  ownership: "Ownership",
+};
+
 export const tierTextClass = (tier: Tier | null): string =>
   tier === 3
     ? "text-platinum-foreground"

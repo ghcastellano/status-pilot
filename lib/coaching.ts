@@ -9,6 +9,64 @@
 import type { BoardType } from "./metrics";
 import type { Pillar, Tier } from "./maturity";
 
+// ── Engajamento / movimento (derivado do histórico de tiers) ─────────
+// Lógica pura reusada pela API e pela UI (SSOT). Espelha o classifyEngagement
+// do Coaching Hub original, adaptado aos nossos tiers.
+export type EngagementStatus = "at_risk" | "graduated" | "in_coaching" | "on_demand";
+
+const seqOf = (tiers: (Tier | null)[]): Tier[] => tiers.filter((t): t is Tier => t != null);
+
+export function recentMaxTier(tiers: (Tier | null)[], window = 4): Tier | null {
+  const recent = seqOf(tiers).slice(-window);
+  return recent.length ? (Math.max(...recent) as Tier) : null;
+}
+
+/** Direção da última MUDANÇA de tier na série (ignora platôs). */
+export function latestTransition(tiers: (Tier | null)[]): "up" | "down" | "flat" {
+  const seq = seqOf(tiers);
+  for (let i = seq.length - 1; i > 0; i--) {
+    if (seq[i] !== seq[i - 1]) return seq[i] > seq[i - 1] ? "up" : "down";
+  }
+  return "flat";
+}
+
+/** Regressão: tier atual abaixo do maior tier mantido na janela recente. */
+export function isAtRisk(tier: Tier | null, tiers: (Tier | null)[]): boolean {
+  const rmax = recentMaxTier(tiers);
+  return tier != null && rmax != null && tier < rmax;
+}
+
+/** Graduado: alcançou E MANTEVE Platinum (≥2 no fim, ou único ponto Platinum). */
+export function isGraduated(tiers: (Tier | null)[]): boolean {
+  const seq = seqOf(tiers);
+  if (!seq.length || seq[seq.length - 1] !== 3) return false;
+  return seq.length === 1 || seq[seq.length - 2] === 3;
+}
+
+export interface EngagementInput {
+  tier: Tier | null;
+  historyTiers: (Tier | null)[];
+  coaching: boolean;
+}
+
+/** Bucket de engajamento (prioridade: risco → platinum → coaching). null = fora do programa. */
+export function classifyEngagement(i: EngagementInput): EngagementStatus | null {
+  if (isAtRisk(i.tier, i.historyTiers)) return "at_risk";
+  if (i.tier === 3) {
+    if (i.coaching) return "in_coaching";
+    return isGraduated(i.historyTiers) ? "graduated" : "on_demand";
+  }
+  if (i.coaching) return "in_coaching";
+  return null;
+}
+
+export const STATUS_META: Record<EngagementStatus, { label: string; cls: string }> = {
+  at_risk: { label: "Em risco", cls: "bg-destructive/10 text-destructive" },
+  graduated: { label: "Graduado", cls: "bg-primary/10 text-primary" },
+  in_coaching: { label: "Em coaching", cls: "bg-primary/10 text-primary" },
+  on_demand: { label: "Sob demanda", cls: "bg-muted text-muted-foreground" },
+};
+
 export type SignalValue = "not_yet" | "emerging" | "consistent";
 
 export const RUBRIC: Record<SignalValue, { label: string; score: 0 | 1 | 2 }> = {
