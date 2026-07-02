@@ -39,7 +39,7 @@ export interface PortfolioBoard {
   mainGap: string | null;
   workingOn: Pillar[];
   behavioral: Readiness;
-  movement: "up" | "down" | "flat";
+  movement: "up" | "down" | "flat" | "recovered";
   leveledUp: boolean;
   caption: string;
 }
@@ -62,12 +62,12 @@ export function ProgramHeader({ boards }: { boards: PortfolioBoard[] }) {
   const denom = total || 1;
   const leveledUp = boards.filter((b) => b.leveledUp).length;
   const attention = boards.filter(needsAttention).length;
-  const graduated = boards.filter((b) => b.status === "graduated").length;
+  const atPlatinum = boards.filter((b) => b.maturity.tier === 3).length;
 
   const movement = [
     { icon: "↑", n: leveledUp, label: "subiram de nível", tone: "text-primary" },
     { icon: "⚠", n: attention, label: "precisam de atenção", tone: "text-destructive" },
-    { icon: "🎓", n: graduated, label: "graduados", tone: "text-primary" },
+    { icon: "🎓", n: atPlatinum, label: "em Platinum", tone: "text-primary" },
   ];
 
   return (
@@ -160,12 +160,13 @@ export function TeamCard({ b, onOpen }: { b: PortfolioBoard; onOpen: (id: string
   const token = b.maturity.tierToken;
   const weakest = new Set(b.maturity.weakest);
   const readiness = READINESS_META[b.behavioral.label];
-  const move =
-    b.movement === "up"
-      ? { arrow: "↑", label: "melhorando", tone: "text-primary" }
-      : b.movement === "down"
-        ? { arrow: "↓", label: "piorando", tone: "text-destructive" }
-        : { arrow: "→", label: "estável", tone: "text-muted-foreground" };
+  const MOVE = {
+    up: { arrow: "↑", label: "subiu de nível", tone: "text-primary" },
+    down: { arrow: "↓", label: "regrediu", tone: "text-destructive" },
+    recovered: { arrow: "↻", label: "recuperou", tone: "text-primary" },
+    flat: { arrow: "→", label: "estável", tone: "text-muted-foreground" },
+  } as const;
+  const move = MOVE[b.movement];
 
   const focusLabel = b.workingOn.length ? "Working on" : b.mainGap ? "Gap" : null;
   const focusText = b.workingOn.length
@@ -261,9 +262,13 @@ export function LeadershipSummary({ boards }: { boards: PortfolioBoard[] }) {
   const lvl = (t: Tier | null) => (t ? TIER_META[t].name : "—");
 
   const improving = inProgram
-    .filter((b) => b.status === "graduated" || b.leveledUp)
+    .filter((b) => b.status === "graduated" || b.leveledUp || b.movement === "recovered")
     .map((b) =>
-      b.status === "graduated" ? `${b.team.name} graduou para Platinum` : `${b.team.name} melhorou para ${lvl(b.maturity.tier)}`
+      b.status === "graduated"
+        ? `${b.team.name} graduou para Platinum`
+        : b.leveledUp
+          ? `${b.team.name} subiu para ${lvl(b.maturity.tier)}`
+          : `${b.team.name} recuperou para ${lvl(b.maturity.tier)}`
     );
 
   const regressing = inProgram.filter((b) => b.status === "at_risk").map((b) => `${b.team.name} regredindo (agora ${lvl(b.maturity.tier)})`);

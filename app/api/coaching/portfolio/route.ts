@@ -3,7 +3,7 @@ import { fetchTeams, fetchTeamData } from "@/lib/data";
 import { computeTeamMetrics } from "@/lib/metrics";
 import { computeMaturity } from "@/lib/maturity";
 import { fetchHistory, fetchPlan, fetchAssessment, fetchExperiments } from "@/lib/coaching-db";
-import { behavioralReadiness, classifyEngagement, latestTransition } from "@/lib/coaching";
+import { behavioralReadiness, classifyEngagement, tierMovement } from "@/lib/coaching";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export async function GET() {
         // salvo opt-out explícito no plano.
         const coaching = plan ? plan.coaching : true;
         const status = classifyEngagement({ tier: maturity.tier, historyTiers, coaching });
-        const transition = latestTransition(historyTiers);
+        const mv = tierMovement(historyTiers);
         const behavioral = behavioralReadiness(assessment?.signals ?? {});
         const workingOn = Array.from(
           new Set(experiments.filter((e) => e.status === "active").map((e) => e.pillar))
@@ -58,8 +58,8 @@ export async function GET() {
           mainGap: plan?.main_gap ?? null,
           workingOn,
           behavioral,
-          movement: transition, // 'up' | 'down' | 'flat'
-          leveledUp: transition === "up",
+          movement: mv.movement, // up | down | flat | recovered (NET no período)
+          leveledUp: mv.leveledUp,
           caption,
         };
       })

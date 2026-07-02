@@ -52,6 +52,7 @@ export default function CoachingPage() {
     let active = true;
     setDetailLoading(true);
     setDetailErr(null);
+    setDetail(null); // limpa o detalhe do time anterior (evita render stale em erro)
     fetch(`/api/coaching/team?teamId=${selectedTeam.id}`, { cache: "no-store" })
       .then(j)
       .then((res: TeamDetail) => active && setDetail(res))
@@ -138,7 +139,9 @@ export default function CoachingPage() {
               <div className="h-64 animate-pulse rounded-xl bg-muted" />
             </div>
           )}
-          {detail && !detailLoading && <TeamDetailPanel key={detail.team.id} d={detail} />}
+          {detail && detail.team.id === selectedTeam?.id && !detailLoading && !detailErr && (
+            <TeamDetailPanel key={detail.team.id} d={detail} />
+          )}
         </TabsContent>
 
         {/* Leadership */}

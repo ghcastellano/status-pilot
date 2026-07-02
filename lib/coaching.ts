@@ -21,13 +21,25 @@ export function recentMaxTier(tiers: (Tier | null)[], window = 4): Tier | null {
   return recent.length ? (Math.max(...recent) as Tier) : null;
 }
 
-/** Direção da última MUDANÇA de tier na série (ignora platôs). */
-export function latestTransition(tiers: (Tier | null)[]): "up" | "down" | "flat" {
+export type Movement = "up" | "down" | "flat" | "recovered";
+
+/**
+ * Movimento NET no período (não a última transição). Distingue subida real de
+ * recuperação: um time que caiu e voltou ao mesmo nível NÃO "subiu de nível".
+ *   up        = terminou acima de onde começou (leveledUp)
+ *   down      = terminou abaixo
+ *   recovered = terminou onde começou, mas houve queda no meio (dip resolvido)
+ *   flat      = estável, sem queda relevante
+ */
+export function tierMovement(tiers: (Tier | null)[]): { movement: Movement; leveledUp: boolean } {
   const seq = seqOf(tiers);
-  for (let i = seq.length - 1; i > 0; i--) {
-    if (seq[i] !== seq[i - 1]) return seq[i] > seq[i - 1] ? "up" : "down";
-  }
-  return "flat";
+  if (seq.length < 2) return { movement: "flat", leveledUp: false };
+  const first = seq[0];
+  const current = seq[seq.length - 1];
+  const min = Math.min(...seq);
+  if (current > first) return { movement: "up", leveledUp: true };
+  if (current < first) return { movement: "down", leveledUp: false };
+  return { movement: min < current ? "recovered" : "flat", leveledUp: false };
 }
 
 /** Regressão: tier atual abaixo do maior tier mantido na janela recente. */
