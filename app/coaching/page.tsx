@@ -3,7 +3,7 @@
 /**
  * /coaching — página ÚNICA (um item no menu). Abas Portfolio · Detalhe · Leadership.
  * O detalhe segue o seletor de time global (header); clicar num card do portfolio
- * seleciona o time e abre o detalhe.
+ * seleciona o time e abre o detalhe. "Gerenciar times" liga/desliga times do programa.
  */
 import * as React from "react";
 import { Trophy } from "lucide-react";
@@ -14,6 +14,8 @@ import {
   ProgramHeader,
   Section,
   LeadershipSummary,
+  RosterModal,
+  ManageTeamsButton,
   type PortfolioBoard,
 } from "@/components/coaching-portfolio";
 import { TeamDetailPanel, type TeamDetail } from "@/components/coaching-detail";
@@ -26,6 +28,7 @@ const needsAttention = (b: PortfolioBoard) => b.status === "at_risk" || b.maturi
 export default function CoachingPage() {
   const { selectedTeam, setSelectedTeamId } = useTeam();
   const [tab, setTab] = React.useState("portfolio");
+  const [showRoster, setShowRoster] = React.useState(false);
 
   const [boards, setBoards] = React.useState<PortfolioBoard[] | null>(null);
   const [boardsErr, setBoardsErr] = React.useState<string | null>(null);
@@ -34,17 +37,19 @@ export default function CoachingPage() {
   const [detailErr, setDetailErr] = React.useState<string | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(true);
 
-  // portfolio (todos os times) — carrega uma vez
-  React.useEffect(() => {
-    let active = true;
-    fetch("/api/coaching/portfolio", { cache: "no-store" })
-      .then(j)
-      .then((res: { boards: PortfolioBoard[] }) => active && setBoards(res.boards))
-      .catch((e: Error) => active && setBoardsErr(e.message));
-    return () => {
-      active = false;
-    };
+  const loadPortfolio = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/coaching/portfolio", { cache: "no-store" }).then(j);
+      setBoards(res.boards);
+      setBoardsErr(null);
+    } catch (e) {
+      setBoardsErr((e as Error).message);
+    }
   }, []);
+
+  React.useEffect(() => {
+    loadPortfolio();
+  }, [loadPortfolio]);
 
   // detalhe do time selecionado (seletor global)
   React.useEffect(() => {
@@ -65,35 +70,50 @@ export default function CoachingPage() {
 
   const openTeam = (id: string) => {
     setSelectedTeamId(id);
+    setShowRoster(false);
     setTab("detail");
   };
 
-  const inProgram = boards ?? [];
-  const attention = inProgram.filter(needsAttention);
-  const onTrack = inProgram.filter((b) => !needsAttention(b));
+  // liga/desliga um time do programa: escreve plan.coaching + atualização otimista + refetch
+  const toggleCoaching = (teamId: string, coaching: boolean) => {
+    setBoards((prev) => prev?.map((b) => (b.team.id === teamId ? { ...b, coaching } : b)) ?? prev);
+    fetch("/api/coaching/plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId, coaching }),
+    })
+      .then(() => loadPortfolio())
+      .catch(() => loadPortfolio());
+  };
+
+  const allBoards = boards ?? [];
+  const program = allBoards.filter((b) => b.status); // no programa (status != null)
+  const attention = program.filter(needsAttention);
+  const onTrack = program.filter((b) => !needsAttention(b));
 
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
-      <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Trophy className="h-5 w-5 text-primary" />
-          <h1 className="text-2xl font-semibold tracking-tight">Agile Coaching</h1>
-          <Badge variant="secondary" title="Thresholds de maturidade ainda não calibrados com dados reais de campo.">
-            thresholds a calibrar
-          </Badge>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Trophy className="h-5 w-5 text-primary" />
+            <h1 className="text-2xl font-semibold tracking-tight">Agile Coaching</h1>
+            <Badge variant="secondary" title="Thresholds de maturidade ainda não calibrados com dados reais de campo.">
+              thresholds a calibrar
+            </Badge>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            O que está sendo coachado, por quê, e o que mudou · maturidade weakest-link por método (Scrum/Kanban).
+          </p>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          O que está sendo coachado, por quê, e o que mudou · maturidade weakest-link por método (Scrum/Kanban).
-        </p>
+        {tab === "portfolio" && boards && <ManageTeamsButton onClick={() => setShowRoster(true)} />}
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-          <TabsTrigger value="detail">
-            Detalhe{selectedTeam ? ` · ${selectedTeam.name}` : ""}
-          </TabsTrigger>
+          <TabsTrigger value="detail">Detalhe{selectedTeam ? ` · ${selectedTeam.name}` : ""}</TabsTrigger>
           <TabsTrigger value="leadership">Leadership</TabsTrigger>
         </TabsList>
 
@@ -109,23 +129,21 @@ export default function CoachingPage() {
           )}
           {boards && (
             <>
-              <ProgramHeader boards={boards} />
-              <div className="space-y-8">
-                <Section
-                  title="Precisa de atenção"
-                  blurb="Regredindo ou preso — comece por aqui."
-                  chip="bg-destructive/10 text-destructive"
-                  boards={attention}
-                  onOpen={openTeam}
-                />
-                <Section
-                  title="No caminho"
-                  blurb="Evoluindo bem."
-                  chip="bg-primary/10 text-primary"
-                  boards={onTrack}
-                  onOpen={openTeam}
-                />
-              </div>
+              <ProgramHeader boards={program} />
+              {program.length === 0 ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  Nenhum time no programa de coaching.{" "}
+                  <button onClick={() => setShowRoster(true)} className="font-medium text-primary hover:underline">
+                    Gerenciar times
+                  </button>{" "}
+                  para incluir um.
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  <Section title="Precisa de atenção" blurb="Regredindo ou preso — comece por aqui." chip="bg-destructive/10 text-destructive" boards={attention} onOpen={openTeam} />
+                  <Section title="No caminho" blurb="Evoluindo bem." chip="bg-primary/10 text-primary" boards={onTrack} onOpen={openTeam} />
+                </div>
+              )}
             </>
           )}
         </TabsContent>
@@ -146,13 +164,13 @@ export default function CoachingPage() {
 
         {/* Leadership */}
         <TabsContent value="leadership">
-          {boards ? (
-            <LeadershipSummary boards={boards} />
-          ) : (
-            <div className="h-40 animate-pulse rounded-xl bg-muted" />
-          )}
+          {boards ? <LeadershipSummary boards={program} /> : <div className="h-40 animate-pulse rounded-xl bg-muted" />}
         </TabsContent>
       </Tabs>
+
+      {showRoster && boards && (
+        <RosterModal boards={allBoards} onToggle={toggleCoaching} onOpen={openTeam} onClose={() => setShowRoster(false)} />
+      )}
     </div>
   );
 }

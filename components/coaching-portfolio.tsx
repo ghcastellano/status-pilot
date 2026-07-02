@@ -6,10 +6,11 @@
  * Adaptado do Coaching Hub original às métricas duais Scrum/Kanban.
  */
 import * as React from "react";
-import { Target, Copy, Check } from "lucide-react";
+import { Target, Copy, Check, Users, X, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   type MaturityResult,
@@ -252,6 +253,109 @@ export function TeamCard({ b, onOpen }: { b: PortfolioBoard; onOpen: (id: string
         </span>
       </div>
     </button>
+  );
+}
+
+// ── Gerenciar times (roster) ──────────────────────────────────────────
+function Switch({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      disabled={disabled}
+      onClick={() => onChange(!on)}
+      className={cn(
+        "relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50",
+        on ? "bg-primary" : "bg-muted-foreground/30"
+      )}
+    >
+      <span className={cn("absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all", on ? "left-[18px]" : "left-0.5")} />
+    </button>
+  );
+}
+
+export function RosterModal({
+  boards,
+  onToggle,
+  onOpen,
+  onClose,
+}: {
+  boards: PortfolioBoard[];
+  onToggle: (teamId: string, coaching: boolean) => void;
+  onOpen: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = React.useState("");
+  const [pending, setPending] = React.useState<string | null>(null);
+  const query = q.trim().toLowerCase();
+  const list = boards.filter((b) => !query || b.team.name.toLowerCase().includes(query) || (b.coach ?? "").toLowerCase().includes(query));
+  const inCount = boards.filter((b) => b.coaching).length;
+
+  const toggle = (b: PortfolioBoard, v: boolean) => {
+    setPending(b.team.id);
+    onToggle(b.team.id, v);
+    setTimeout(() => setPending(null), 600);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-xl border border-border bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-border p-5">
+          <div>
+            <h2 className="text-lg font-semibold">Times no programa de coaching</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {inCount} em coaching · ligar um time o inclui no programa e no resumo da liderança.
+            </p>
+          </div>
+          <button onClick={onClose} aria-label="Fechar" className="rounded p-1 text-muted-foreground hover:bg-muted">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="p-5">
+          <div className="relative mb-3">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar time ou coach…" className="pl-9" />
+          </div>
+          <ul className="max-h-[55vh] divide-y divide-border overflow-y-auto">
+            {list.map((b) => (
+              <li key={b.team.id} className="flex items-center gap-3 py-2.5">
+                <Switch on={b.coaching} onChange={(v) => toggle(b, v)} disabled={pending === b.team.id} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{b.team.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    <span className="capitalize">{b.team.board_type}</span>
+                    {b.coach ? ` · ${b.coach}` : ""}
+                  </p>
+                </div>
+                {b.maturity.tier && b.maturity.tierToken ? (
+                  <Badge variant={b.maturity.tierToken} className="shrink-0 text-[10px] font-semibold">
+                    {b.maturity.tierName}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="shrink-0 text-[10px]">
+                    —
+                  </Badge>
+                )}
+                <button onClick={() => onOpen(b.team.id)} className="shrink-0 text-xs font-medium text-primary hover:underline">
+                  Abrir
+                </button>
+              </li>
+            ))}
+            {list.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">Nenhum time encontrado.</li>}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Botão que abre o roster (usado no header do Portfolio) ────────────
+export function ManageTeamsButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button variant="outline" size="sm" onClick={onClick}>
+      <Users className="h-4 w-4" /> Gerenciar times
+    </Button>
   );
 }
 
