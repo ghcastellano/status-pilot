@@ -60,13 +60,17 @@ export function PlanCard({ teamId, initial }: { teamId: string; initial: Coachin
   const [flashKey, flash, flashOk] = useFlash();
 
   const save = (field: string, value: string) => {
-    setPlan((p) => ({ ...p, [field]: value || null }));
     fetch("/api/coaching/plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ teamId, [field]: value }),
     })
-      .then((r) => flash(field, r.ok))
+      .then((r) => {
+        // só confirma o estado local no sucesso — em falha o valor anterior
+        // permanece e o usuário pode tentar de novo
+        if (r.ok) setPlan((p) => ({ ...p, [field]: value || null }));
+        flash(field, r.ok);
+      })
       .catch(() => flash(field, false));
   };
 
@@ -162,13 +166,41 @@ export function ExperimentsCard({
   };
 
   const update = async (exp: Experiment, patch: Partial<Experiment>) => {
-    setExps((prev) => prev.map((e) => (e.id === exp.id ? { ...e, ...patch } : e)));
-    await post({ teamId, id: exp.id, pillar: exp.pillar, behavior: exp.behavior, ...patch }, `exp:${exp.id}`);
+    const prev = exps;
+    // otimista, mas envia o registro COMPLETO mesclado (um patch parcial não
+    // pode apagar metric/hypothesis/outcome) e reverte se a escrita falhar
+    setExps((p) => p.map((e) => (e.id === exp.id ? { ...e, ...patch } : e)));
+    const saved = await post(
+      {
+        teamId,
+        id: exp.id,
+        pillar: exp.pillar,
+        behavior: exp.behavior,
+        metric: exp.metric,
+        hypothesis: exp.hypothesis,
+        outcome: exp.outcome,
+        status: exp.status,
+        ...patch,
+      },
+      `exp:${exp.id}`
+    );
+    if (!saved) setExps(prev);
   };
 
   const remove = (exp: Experiment) => {
-    setExps((prev) => prev.filter((e) => e.id !== exp.id));
-    fetch(`/api/coaching/experiments?id=${exp.id}`, { method: "DELETE" }).catch(() => flash(`exp:${exp.id}`, false));
+    const prev = exps;
+    setExps((p) => p.filter((e) => e.id !== exp.id));
+    fetch(`/api/coaching/experiments?id=${exp.id}`, { method: "DELETE" })
+      .then((r) => {
+        if (!r.ok) {
+          setExps(prev);
+          flash(`exp:${exp.id}`, false);
+        }
+      })
+      .catch(() => {
+        setExps(prev);
+        flash(`exp:${exp.id}`, false);
+      });
   };
 
   const active = exps.filter((e) => e.status === "active");

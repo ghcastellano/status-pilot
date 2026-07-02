@@ -138,9 +138,10 @@ export function computeMaturity(m: TeamMetrics): MaturityResult {
   const bt = m.team.board_type;
   const f = m.flow;
 
-  // Derivados compartilhados
+  // Derivados compartilhados. Sem dados ⇒ null ⇒ tier null ⇒ fora do min()
+  // (nunca "0%" virando Silver/Platinum falso).
   const cycleRatio = f.deliveryCycleTime.median > 0 ? f.deliveryCycleTime.p85 / f.deliveryCycleTime.median : null;
-  const flowEffPct = Math.round(f.flowEfficiency * 100);
+  const flowEffPct = f.flowEffSamples > 0 ? Math.round(f.flowEfficiency * 100) : null;
   const sle = f.deliveryCycleTime.p85; // SLE = p85 do delivery cycle time
   const agePts = m.advanced.aging.points;
   const agingBreach =
@@ -183,7 +184,15 @@ export function computeMaturity(m: TeamMetrics): MaturityResult {
         })()
       : null;
 
-  const lowConfidence = bt === "scrum" && (m.scrum?.closedSprintCount ?? 0) < 6;
+  // Baixa confiança: pouca amostra p/ o método (não suprime o tier — sinaliza)
+  const delivered = f.deliveryCycleTime.count;
+  const lowConfidence =
+    bt === "scrum" ? (m.scrum?.closedSprintCount ?? 0) < 6 : delivered < 10;
+  const note = !lowConfidence
+    ? null
+    : bt === "scrum"
+      ? `Poucas sprints fechadas (${m.scrum?.closedSprintCount ?? 0}) — CV de baixa confiança`
+      : `Poucos itens entregues (${delivered}) — leitura de baixa confiança`;
 
   return {
     boardType: bt,
@@ -195,6 +204,6 @@ export function computeMaturity(m: TeamMetrics): MaturityResult {
     weakest,
     sayDo,
     lowConfidence,
-    note: lowConfidence ? `Poucas sprints fechadas (${m.scrum?.closedSprintCount ?? 0}) — CV de baixa confiança` : null,
+    note,
   };
 }

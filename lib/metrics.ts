@@ -119,9 +119,10 @@ export interface FlowMetrics {
   deliveryCycleTime: CtStat;
   leadTime: CtStat;
   flowEfficiency: number; // 0..1
+  flowEffSamples: number; // nº de issues com ratio computável (0 = sem dados, não "0%")
   throughput: { perWeekAvg: number; series: { weekLabel: string; weekStart: string; count: number }[] };
-  throughputCV: number | null; // estabilidade do throughput semanal (stdev/avg, valor cru)
-  bugRatio: number; // % de issues type='bug' — proxy de rework p/ o pilar Quality
+  throughputCV: number | null; // estabilidade do throughput semanal (stdev/avg cru, só semanas no horizonte)
+  bugRatio: number | null; // % de issues type='bug' — proxy de rework; null sem issues
   wip: number; // tudo em fluxo (fora do funil e de Live/Done)
   deliveryWip: number; // só estágios de delivery (In Progress → Ready for Release)
   stageDistribution: StageCount[];
@@ -130,7 +131,7 @@ export interface FlowMetrics {
 }
 
 /** Flow efficiency média: tempo "ativo" / tempo total, a partir dos stages. */
-function flowEfficiency(issues: IssueRow[]): number {
+function flowEfficiency(issues: IssueRow[]): { value: number; samples: number } {
   const ratios: number[] = [];
   for (const i of issues) {
     const st = i.stages;
@@ -144,8 +145,8 @@ function flowEfficiency(issues: IssueRow[]): number {
     }
     if (total > 0) ratios.push(active / total);
   }
-  if (!ratios.length) return 0;
-  return Math.round((ratios.reduce((a, b) => a + b, 0) / ratios.length) * 100) / 100;
+  if (!ratios.length) return { value: 0, samples: 0 };
+  return { value: Math.round((ratios.reduce((a, b) => a + b, 0) / ratios.length) * 100) / 100, samples: ratios.length };
 }
 
 export function computeFlow(issues: IssueRow[], now: number, weeks = 8): FlowMetrics {
@@ -174,12 +175,30 @@ export function computeFlow(issues: IssueRow[], now: number, weeks = 8): FlowMet
   }
   const perWeekAvg = round1(series.reduce((a, b) => a + b.count, 0) / (series.length || 1));
 
-  // Throughput stability (CV) — cadência semanal; valor cru, guard avg=0.
-  const tpCounts = series.map((s) => s.count);
-  const tpVar = tpCounts.length ? tpCounts.reduce((a, c) => a + (c - perWeekAvg) ** 2, 0) / tpCounts.length : 0;
-  const throughputCV = tpCounts.length >= 3 && perWeekAvg > 0 ? Math.sqrt(tpVar) / perWeekAvg : null;
-  // Bug ratio — proxy de rework p/ o pilar Quality (rework real bloqueado em changelog ingestion).
-  const bugRatio = issues.length ? Math.round((issues.filter((i) => i.type === "bug").length / issues.length) * 100) : 0;
+  // Throughput stability (CV) — mede estabilidade da CADÊNCIA DE RELEASE, então
+  // só conta semanas a partir da 1ª release (semanas de discovery sem release
+  // seriam zeros fantasmas que inflam o CV — crítico no replay as-of). Média
+  // CRUA no divisor (round1 distorce perto dos boundaries). null se < 3 semanas
+  // com cadência ou média 0.
+  const firstRelease = released.length
+    ? released.reduce((min, i) => Math.min(min, ms(i.released_at)!), Infinity)
+    : null;
+  const inHorizon =
+    firstRelease == null
+      ? []
+      : series.filter((s) => {
+          const weekEnd = new Date(s.weekStart + "T00:00:00Z").getTime() + 7 * DAY;
+          return weekEnd > firstRelease;
+        });
+  const tpCounts = inHorizon.map((s) => s.count);
+  const tpRawAvg = tpCounts.length ? tpCounts.reduce((a, b) => a + b, 0) / tpCounts.length : 0;
+  const tpVar = tpCounts.length ? tpCounts.reduce((a, c) => a + (c - tpRawAvg) ** 2, 0) / tpCounts.length : 0;
+  const throughputCV = tpCounts.length >= 3 && tpRawAvg > 0 ? Math.sqrt(tpVar) / tpRawAvg : null;
+  // Bug ratio — proxy de rework p/ o pilar Quality (rework real bloqueado em
+  // changelog ingestion). null quando não há issues (sem dados ≠ 0% de bugs).
+  const bugRatio = issues.length
+    ? Math.round((issues.filter((i) => i.type === "bug").length / issues.length) * 100)
+    : null;
 
   // distribuição por estágio atual (exclui Live/Done — foco no fluxo ativo)
   const dist = new Map<string, { count: number; kind: string }>();
@@ -194,11 +213,13 @@ export function computeFlow(issues: IssueRow[], now: number, weeks = 8): FlowMet
     stage, count: v.count, kind: v.kind,
   }));
 
+  const flowEff = flowEfficiency(issues);
   return {
     discoveryCycleTime: intervalStats(issues, "discovery_started_at", "discovery_done_at"),
     deliveryCycleTime: intervalStats(issues, "started_at", "done_at"),
     leadTime: intervalStats(issues, "created_at", "released_at"),
-    flowEfficiency: flowEfficiency(issues),
+    flowEfficiency: flowEff.value,
+    flowEffSamples: flowEff.samples,
     throughput: { perWeekAvg, series },
     throughputCV,
     bugRatio,

@@ -40,15 +40,17 @@ export async function POST(req: NextRequest) {
   }
   const status = typeof body?.status === "string" && STATUSES.has(body.status) ? body.status : undefined;
   try {
+    // presence-aware: em UPDATE, só as chaves enviadas são escritas — um patch
+    // parcial (ex.: só status) não pode apagar metric/hypothesis/outcome.
     const experiment = await saveExperiment({
       id: typeof body?.id === "number" ? body.id : undefined,
       team_id: teamId,
       pillar,
       behavior,
-      metric: s(body?.metric, 120),
-      hypothesis: s(body?.hypothesis),
-      outcome: s(body?.outcome),
-      status,
+      ...("metric" in body ? { metric: s(body.metric, 120) } : {}),
+      ...("hypothesis" in body ? { hypothesis: s(body.hypothesis) } : {}),
+      ...("outcome" in body ? { outcome: s(body.outcome) } : {}),
+      ...(status ? { status } : {}),
     } as any);
     return NextResponse.json({ experiment });
   } catch (e) {
