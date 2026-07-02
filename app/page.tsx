@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CycleScatter, ThroughputBar, VelocityBar, BurndownLine } from "@/components/charts";
 import { CFDChart, AgingScatter, CycleHistogram, TrendsChart } from "@/components/charts-advanced";
+import { DashboardMaturity, type DashboardMaturityData } from "@/components/dashboard-maturity";
 
 const PERIODS = [
   { v: "4", label: "4 semanas" },
@@ -32,6 +33,22 @@ export default function DashboardPage() {
   const [insights, setInsights] = React.useState<any>(null);
   const [insightLoading, setInsightLoading] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
+  const [showDetailed, setShowDetailed] = React.useState(false);
+  const [mat, setMat] = React.useState<DashboardMaturityData | null>(null);
+
+  // Maturidade do time (UNFILTERED — nível é propriedade do time, igual ao Coaching Hub)
+  React.useEffect(() => {
+    if (!selectedTeam) return;
+    let active = true;
+    setMat(null);
+    fetch(`/api/coaching/team?teamId=${selectedTeam.id}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: DashboardMaturityData) => active && setMat(d))
+      .catch(() => active && setMat(null));
+    return () => {
+      active = false;
+    };
+  }, [selectedTeam?.id, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (!selectedTeam) return;
@@ -165,6 +182,26 @@ export default function DashboardPage() {
       </div>
       {syncMsg && <p className="text-xs text-primary">{syncMsg}</p>}
 
+      {/* ── Seção de Maturidade: nível + referência + 3 pilares (não filtrável) ── */}
+      {mat ? (
+        <DashboardMaturity data={mat} />
+      ) : (
+        <div className="space-y-4">
+          <div className="h-64 animate-pulse rounded-xl bg-muted" />
+          <div className="h-48 animate-pulse rounded-xl bg-muted" />
+        </div>
+      )}
+
+      {/* ── Explorar métricas detalhadas (com filtros) — recolhível ── */}
+      <button
+        onClick={() => setShowDetailed((v) => !v)}
+        className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronDown className={`h-4 w-4 transition-transform ${showDetailed ? "rotate-180" : ""}`} />
+        Explorar métricas detalhadas (com filtros) {showDetailed ? "" : "— mostrar"}
+      </button>
+      {showDetailed && (
+        <>
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Sparkles className="h-3.5 w-3.5 text-primary" />
         {insightLoading ? "IA interpretando cada métrica…" : "Leitura automática da IA em cada métrica"}
@@ -259,6 +296,8 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

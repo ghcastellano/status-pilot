@@ -12,7 +12,7 @@
  * O board_type decide qual conjunto de métricas se aplica. Say-Do (Scrum) é CONTEXTO,
  * nunca driver de tier. TODOS os thresholds estão marcados "a calibrar".
  */
-import type { TeamMetrics } from "./metrics";
+import type { TeamMetrics, BoardType } from "./metrics";
 
 export type Tier = 1 | 2 | 3;
 export type TierToken = "silver" | "gold" | "platinum";
@@ -58,6 +58,46 @@ export const PILLAR_SHORT: Record<Pillar, string> = {
   quality: "Quality",
   ownership: "Ownership",
 };
+
+// Nome + pergunta de cada pilar (para a tela de maturidade do dashboard)
+export const PILLAR_INFO: Record<Pillar, { n: number; title: string; question: string }> = {
+  flow: { n: 1, title: "Predictability & Flow", question: "O time consegue planejar e entregar de forma previsível?" },
+  quality: { n: 2, title: "Flow & Quality", question: "O trabalho flui de forma suave e com qualidade?" },
+  ownership: { n: 3, title: "Team Ownership & Execution", question: "O time opera como uma unidade auto-gerida?" },
+};
+
+// Modelo de suporte recomendado por tier (contexto na tela de maturidade)
+export const SUPPORT_MODEL: Record<Tier, string> = {
+  1: "Coach dedicado — engajamento intenso para estabelecer fundamentos e destravar o time.",
+  2: "Suporte condicional — coach compartilhado, engajamento pontual conforme a necessidade.",
+  3: "Sob demanda — health checks periódicos; o time se autogere.",
+};
+
+// Referência de bandas por métrica × tier (painel "Referência de Maturidade")
+export interface MetricBand {
+  label: string;
+  silver: string;
+  gold: string;
+  platinum: string;
+}
+export function maturityReference(bt: BoardType): MetricBand[] {
+  if (bt === "scrum") {
+    const T = SCRUM_THRESHOLDS;
+    return [
+      { label: "Predictability (velocity CV)", silver: `> ${T.velocityCV.silverAbove}`, gold: `${T.velocityCV.platinumBelow}–${T.velocityCV.silverAbove}`, platinum: `< ${T.velocityCV.platinumBelow}` },
+      { label: "Cycle time p85/p50", silver: `> ${T.cycleRatio.silverAbove}x`, gold: `${T.cycleRatio.platinumBelow}–${T.cycleRatio.silverAbove}x`, platinum: `< ${T.cycleRatio.platinumBelow}x` },
+      { label: "Flow efficiency", silver: `< ${T.flowEff.silverBelow}%`, gold: `${T.flowEff.silverBelow}–${T.flowEff.platinumMin}%`, platinum: `≥ ${T.flowEff.platinumMin}%` },
+      { label: "Rework (proxy: bug ratio)", silver: `> ${T.bugRatio.silverAbove}%`, gold: `${T.bugRatio.platinumBelow}–${T.bugRatio.silverAbove}%`, platinum: `< ${T.bugRatio.platinumBelow}%` },
+    ];
+  }
+  const T = KANBAN_THRESHOLDS;
+  return [
+    { label: "Cycle time p85/p50", silver: `> ${T.cycleRatio.silverAbove}x`, gold: `${T.cycleRatio.platinumBelow}–${T.cycleRatio.silverAbove}x`, platinum: `< ${T.cycleRatio.platinumBelow}x` },
+    { label: "Throughput stability (CV)", silver: `> ${T.throughputCV.silverAbove}`, gold: `${T.throughputCV.platinumBelow}–${T.throughputCV.silverAbove}`, platinum: `< ${T.throughputCV.platinumBelow}` },
+    { label: "Flow efficiency", silver: `< ${T.flowEff.silverBelow}%`, gold: `${T.flowEff.silverBelow}–${T.flowEff.platinumMin}%`, platinum: `≥ ${T.flowEff.platinumMin}%` },
+    { label: "WIP/Aging breach", silver: `> ${T.agingBreach.silverAbove}%`, gold: `${T.agingBreach.platinumBelow}–${T.agingBreach.silverAbove}%`, platinum: `< ${T.agingBreach.platinumBelow}%` },
+  ];
+}
 
 export const tierTextClass = (tier: Tier | null): string =>
   tier === 3

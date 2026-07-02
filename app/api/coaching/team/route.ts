@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
       maturity,
       status,
       coach: plan?.coach ?? null,
+      metrics, // TeamMetrics completo (para os gráficos dos pilares no dashboard)
       history,
       plan,
       assessment,
