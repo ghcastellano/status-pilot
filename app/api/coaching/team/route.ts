@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchTeamData } from "@/lib/data";
 import { computeTeamMetrics } from "@/lib/metrics";
 import { computeMaturity } from "@/lib/maturity";
-import { fetchHistory, fetchPlan, fetchAssessment, fetchExperiments } from "@/lib/coaching-db";
+import { fetchHistory, fetchPlan, fetchAssessment, fetchExperiments, fetchCommentsForTeam, fetchFieldHistory } from "@/lib/coaching-db";
 import { classifyEngagement } from "@/lib/coaching";
 
 export const runtime = "nodejs";
@@ -20,11 +20,13 @@ export async function GET(req: NextRequest) {
     if (!team) {
       return NextResponse.json({ error: "Time não encontrado" }, { status: 404 });
     }
-    const [history, plan, assessment, experiments] = await Promise.all([
+    const [history, plan, assessment, experiments, comments, fieldHistory] = await Promise.all([
       fetchHistory(teamId),
       fetchPlan(teamId),
       fetchAssessment(teamId),
       fetchExperiments(teamId),
+      fetchCommentsForTeam(teamId),
+      fetchFieldHistory(teamId),
     ]);
     const epicNames = Object.fromEntries(epics.map((e) => [e.epic_key, e.name]));
     const metrics = computeTeamMetrics(team, sprints, issues, { weeks: 12, epicNames });
@@ -50,6 +52,8 @@ export async function GET(req: NextRequest) {
       plan,
       assessment,
       experiments,
+      comments,
+      fieldHistory,
       evidence: {
         scatter: metrics.flow.scatter,
         cycleP50: metrics.flow.deliveryCycleTime.median,

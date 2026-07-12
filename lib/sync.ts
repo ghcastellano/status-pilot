@@ -6,7 +6,7 @@
  * a granularidade dos estágios do bloco SPMETA. Times/sprints/épicos são config
  * já no banco e não são tocados aqui.
  */
-import { JiraClient, jiraConfigFromEnv, extractSpmeta, normStageName, stageToStatus } from "./jira";
+import { jiraProviderFromEnv, extractSpmeta, normStageName, stageToStatus } from "./jira";
 import { getSupabaseAdmin } from "./supabase";
 
 // marco (coluna no banco) → nome do custom field de data no Jira
@@ -26,7 +26,8 @@ export interface SyncResult {
 }
 
 export async function syncIssuesFromJira(): Promise<SyncResult> {
-  const jira = new JiraClient(jiraConfigFromEnv());
+  // OAuth 2.0 quando configurado (JIRA_OAUTH_CLIENT_ID), senão Basic token.
+  const jira = jiraProviderFromEnv();
   const sb = getSupabaseAdmin();
 
   // resolve fieldId por nome (deploy-safe)

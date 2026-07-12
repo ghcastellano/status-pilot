@@ -246,6 +246,7 @@ export interface ScrumMetrics {
   closedSprintCount: number; // p/ flag de baixa confiança quando < 6
   velocity: VelocityPoint[];
   sayDoRatioAvg: number;
+  sayDoSprintCount: number; // sprints fechadas COM committed > 0 (base do Say-Do); 0 ⇒ sem sinal
   currentSprint: {
     id: string; name: string; goal: string | null;
     committed: number; completed: number; sayDo: number;
@@ -277,7 +278,8 @@ export function computeScrum(sprints: SprintRow[], issues: IssueRow[], now: numb
   const rcAvg = recentClosedPts.length ? recentClosedPts.reduce((a, b) => a + b, 0) / recentClosedPts.length : 0;
   const rcVar = recentClosedPts.length ? recentClosedPts.reduce((a, v) => a + (v - rcAvg) ** 2, 0) / recentClosedPts.length : 0;
   const velocityCV = recentClosedPts.length >= 3 && rcAvg > 0 ? Math.sqrt(rcVar) / rcAvg : null;
-  const sd = closed.map((s) => completedWithin(s, issues) / s.committed_points);
+  // exclui sprints com committed 0 (divisão inválida — Say-Do agora dirige o tier)
+  const sd = closed.filter((s) => s.committed_points > 0).map((s) => completedWithin(s, issues) / s.committed_points);
   const sayDoRatioAvg = sd.length ? Math.round((sd.reduce((a, b) => a + b, 0) / sd.length) * 100) / 100 : 0;
 
   const active = ordered.find((s) => s.state === "active") ?? null;
@@ -307,7 +309,7 @@ export function computeScrum(sprints: SprintRow[], issues: IssueRow[], now: numb
     }
   }
   const sprintList = ordered.map((s) => ({ id: s.id, name: s.name, state: s.state }));
-  return { avgVelocity: round1(avgVelocity), velocityStdev: round1(Math.sqrt(variance)), velocityCV, closedSprintCount: closed.length, velocity, sayDoRatioAvg, currentSprint, burndown, sprints: sprintList };
+  return { avgVelocity: round1(avgVelocity), velocityStdev: round1(Math.sqrt(variance)), velocityCV, closedSprintCount: closed.length, velocity, sayDoRatioAvg, sayDoSprintCount: sd.length, currentSprint, burndown, sprints: sprintList };
 }
 
 // ── AVANÇADO (estilo eazyBI / Actionable Agile — construído por nós) ──

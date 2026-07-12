@@ -39,19 +39,23 @@ export async function POST(req: NextRequest) {
     );
   }
   const status = typeof body?.status === "string" && STATUSES.has(body.status) ? body.status : undefined;
+  const changedBy = s(body?.changedBy, 80) ?? "—";
   try {
     // presence-aware: em UPDATE, só as chaves enviadas são escritas — um patch
     // parcial (ex.: só status) não pode apagar metric/hypothesis/outcome.
-    const experiment = await saveExperiment({
-      id: typeof body?.id === "number" ? body.id : undefined,
-      team_id: teamId,
-      pillar,
-      behavior,
-      ...("metric" in body ? { metric: s(body.metric, 120) } : {}),
-      ...("hypothesis" in body ? { hypothesis: s(body.hypothesis) } : {}),
-      ...("outcome" in body ? { outcome: s(body.outcome) } : {}),
-      ...(status ? { status } : {}),
-    } as any);
+    const experiment = await saveExperiment(
+      {
+        id: typeof body?.id === "number" ? body.id : undefined,
+        team_id: teamId,
+        pillar,
+        behavior,
+        ...("metric" in body ? { metric: s(body.metric, 120) } : {}),
+        ...("hypothesis" in body ? { hypothesis: s(body.hypothesis) } : {}),
+        ...("outcome" in body ? { outcome: s(body.outcome) } : {}),
+        ...(status ? { status } : {}),
+      } as any,
+      changedBy
+    );
     return NextResponse.json({ experiment });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
@@ -63,8 +67,9 @@ export async function DELETE(req: NextRequest) {
   if (!Number.isFinite(id) || id <= 0) {
     return NextResponse.json({ error: "id é obrigatório" }, { status: 400 });
   }
+  const changedBy = s(req.nextUrl.searchParams.get("by"), 80) ?? "—";
   try {
-    await deleteExperiment(id);
+    await deleteExperiment(id, changedBy);
     return NextResponse.json({ removed: 1 });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

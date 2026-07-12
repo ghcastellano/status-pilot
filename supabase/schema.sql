@@ -4,6 +4,9 @@
 -- Idempotente: seguro re-rodar.
 -- ─────────────────────────────────────────────────────────────
 
+drop table if exists experiment_comments cascade;
+drop table if exists coaching_field_history cascade;
+drop table if exists jira_connections cascade;
 drop table if exists coaching_experiments cascade;
 drop table if exists coaching_assessments cascade;
 drop table if exists coaching_plans cascade;
@@ -149,3 +152,48 @@ create table coaching_experiments (
   created_at  timestamptz not null default now()
 );
 create index coaching_experiments_team_idx on coaching_experiments(team_id, created_at desc);
+
+-- Comentários / registros de um experimento ao longo do tempo (thread simples).
+-- Vários por experimento — é o "log de resultados" que evolui, distinto do
+-- campo único `outcome`. Sem auth no app ⇒ autor é texto livre.
+create table experiment_comments (
+  id            bigint generated always as identity primary key,
+  experiment_id bigint not null references coaching_experiments(id) on delete cascade,
+  team_id       text not null references teams(id) on delete cascade,
+  author        text not null,
+  body          text not null,
+  created_at    timestamptz not null default now()
+);
+create index experiment_comments_exp_idx on experiment_comments(experiment_id, created_at asc);
+create index experiment_comments_team_idx on experiment_comments(team_id, created_at asc);
+
+-- Histórico de mudanças por CAMPO: 1 linha por valor que MUDOU de fato (old→new).
+-- Cobre plano, experimentos e sinais. Alimenta o painel "histórico inteligente".
+create table coaching_field_history (
+  id           bigint generated always as identity primary key,
+  team_id      text not null references teams(id) on delete cascade,
+  section      text not null check (section in ('plan','experiment','signal')),
+  entity_id    bigint,                        -- id do experimento quando section='experiment'
+  entity_label text,                          -- rótulo humano (behavior do exp, nome do sinal…)
+  field        text not null,                 -- campo alterado (ou 'created'/'deleted')
+  old_value    text,
+  new_value    text,
+  changed_by   text not null,
+  changed_at   timestamptz not null default now()
+);
+create index coaching_field_history_team_idx on coaching_field_history(team_id, changed_at desc);
+
+-- Conexão OAuth 2.0 (3LO) com o Jira. Linha única (id='default') para o site
+-- conectado; tokens guardados no backend (service_role), nunca no frontend.
+create table jira_connections (
+  id            text primary key default 'default',
+  cloud_id      text not null,
+  site_url      text not null,
+  access_token  text not null,
+  refresh_token text,
+  expires_at    timestamptz not null,
+  scopes        text,
+  account_id    text,
+  account_name  text,
+  updated_at    timestamptz not null default now()
+);

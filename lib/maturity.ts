@@ -9,8 +9,10 @@
  *   • Flow & Quality         → quant, entra no min()
  *   • Ownership              → SÓ sinais comportamentais (não entra no min() quantitativo)
  *
- * O board_type decide qual conjunto de métricas se aplica. Say-Do (Scrum) é CONTEXTO,
- * nunca driver de tier. TODOS os thresholds estão marcados "a calibrar".
+ * O board_type decide qual conjunto de métricas se aplica. Métricas em UNIDADES
+ * NATURAIS (dias, %) — sem razão/CV — para não exigir legenda (KISS). Say-Do (Scrum)
+ * é a métrica de confiabilidade e ENTRA no tier; a nuance de sub-commit (>110%) vira
+ * caption, não penaliza. Thresholds propostos, a calibrar com dados reais.
  */
 import type { TeamMetrics, BoardType } from "./metrics";
 
@@ -25,19 +27,18 @@ export const tierHigherBetter = (v: number, platinumMin: number, silverBelow: nu
 export const tierLowerBetter = (v: number, platinumBelow: number, silverAbove: number): Tier =>
   v < platinumBelow ? 3 : v > silverAbove ? 1 : 2;
 
-// ── Thresholds por método (a calibrar) ──────────────────────────────
+// ── Thresholds por método — unidades naturais (KISS: dias e %, nada de razão/CV) ──
+// Todas as métricas são as que qualquer PM/dev/gerente lê sem legenda.
 export const SCRUM_THRESHOLDS = {
-  velocityCV: { platinumBelow: 0.15, silverAbove: 0.3 }, // LB
-  cycleRatio: { platinumBelow: 2.0, silverAbove: 3.0 }, // LB
-  flowEff: { platinumMin: 40, silverBelow: 15 }, // HB (%)
-  bugRatio: { platinumBelow: 5, silverAbove: 20 }, // LB (%) — proxy de rework
+  sayDo: { platinumMin: 90, silverBelow: 75 }, // HB (%) — confiabilidade: entregue ÷ combinado
+  cycleP85Days: { platinumBelow: 7, silverAbove: 14 }, // LB (dias) — 85% entregam em ≤ X dias
+  defectRate: { platinumBelow: 5, silverAbove: 20 }, // LB (%) — fatia de issues que são bug
 } as const;
 
 export const KANBAN_THRESHOLDS = {
-  cycleRatio: { platinumBelow: 2.0, silverAbove: 3.0 }, // LB
-  throughputCV: { platinumBelow: 0.4, silverAbove: 0.7 }, // LB
-  flowEff: { platinumMin: 40, silverBelow: 15 }, // HB (%)
-  agingBreach: { platinumBelow: 10, silverAbove: 30 }, // LB (%)
+  cycleP85Days: { platinumBelow: 7, silverAbove: 14 }, // LB (dias) — 85% entregam em ≤ X dias
+  agingBreach: { platinumBelow: 10, silverAbove: 30 }, // LB (%) — itens parados além do SLE (p85)
+  defectRate: { platinumBelow: 5, silverAbove: 20 }, // LB (%) — fatia de issues que são bug
 } as const;
 
 // ── Metadados de tier / pilar ───────────────────────────────────────
@@ -84,18 +85,16 @@ export function maturityReference(bt: BoardType): MetricBand[] {
   if (bt === "scrum") {
     const T = SCRUM_THRESHOLDS;
     return [
-      { label: "Predictability (velocity CV)", silver: `> ${T.velocityCV.silverAbove}`, gold: `${T.velocityCV.platinumBelow}–${T.velocityCV.silverAbove}`, platinum: `< ${T.velocityCV.platinumBelow}` },
-      { label: "Cycle time p85/p50", silver: `> ${T.cycleRatio.silverAbove}x`, gold: `${T.cycleRatio.platinumBelow}–${T.cycleRatio.silverAbove}x`, platinum: `< ${T.cycleRatio.platinumBelow}x` },
-      { label: "Flow efficiency", silver: `< ${T.flowEff.silverBelow}%`, gold: `${T.flowEff.silverBelow}–${T.flowEff.platinumMin}%`, platinum: `≥ ${T.flowEff.platinumMin}%` },
-      { label: "Rework (proxy: bug ratio)", silver: `> ${T.bugRatio.silverAbove}%`, gold: `${T.bugRatio.platinumBelow}–${T.bugRatio.silverAbove}%`, platinum: `< ${T.bugRatio.platinumBelow}%` },
+      { label: "Confiabilidade (Say-Do)", silver: `< ${T.sayDo.silverBelow}%`, gold: `${T.sayDo.silverBelow}–${T.sayDo.platinumMin}%`, platinum: `≥ ${T.sayDo.platinumMin}%` },
+      { label: "Cycle time (p85)", silver: `> ${T.cycleP85Days.silverAbove} dias`, gold: `${T.cycleP85Days.platinumBelow}–${T.cycleP85Days.silverAbove} dias`, platinum: `< ${T.cycleP85Days.platinumBelow} dias` },
+      { label: "Taxa de defeitos", silver: `> ${T.defectRate.silverAbove}%`, gold: `${T.defectRate.platinumBelow}–${T.defectRate.silverAbove}%`, platinum: `< ${T.defectRate.platinumBelow}%` },
     ];
   }
   const T = KANBAN_THRESHOLDS;
   return [
-    { label: "Cycle time p85/p50", silver: `> ${T.cycleRatio.silverAbove}x`, gold: `${T.cycleRatio.platinumBelow}–${T.cycleRatio.silverAbove}x`, platinum: `< ${T.cycleRatio.platinumBelow}x` },
-    { label: "Throughput stability (CV)", silver: `> ${T.throughputCV.silverAbove}`, gold: `${T.throughputCV.platinumBelow}–${T.throughputCV.silverAbove}`, platinum: `< ${T.throughputCV.platinumBelow}` },
-    { label: "Flow efficiency", silver: `< ${T.flowEff.silverBelow}%`, gold: `${T.flowEff.silverBelow}–${T.flowEff.platinumMin}%`, platinum: `≥ ${T.flowEff.platinumMin}%` },
-    { label: "WIP/Aging breach", silver: `> ${T.agingBreach.silverAbove}%`, gold: `${T.agingBreach.platinumBelow}–${T.agingBreach.silverAbove}%`, platinum: `< ${T.agingBreach.platinumBelow}%` },
+    { label: "Cycle time (p85)", silver: `> ${T.cycleP85Days.silverAbove} dias`, gold: `${T.cycleP85Days.platinumBelow}–${T.cycleP85Days.silverAbove} dias`, platinum: `< ${T.cycleP85Days.platinumBelow} dias` },
+    { label: "Itens parados (aging)", silver: `> ${T.agingBreach.silverAbove}%`, gold: `${T.agingBreach.platinumBelow}–${T.agingBreach.silverAbove}%`, platinum: `< ${T.agingBreach.platinumBelow}%` },
+    { label: "Taxa de defeitos", silver: `> ${T.defectRate.silverAbove}%`, gold: `${T.defectRate.platinumBelow}–${T.defectRate.silverAbove}%`, platinum: `< ${T.defectRate.platinumBelow}%` },
   ];
 }
 
@@ -143,8 +142,7 @@ export interface MaturityResult {
 }
 
 // ── Formatadores ────────────────────────────────────────────────────
-const fmtX = (v: number | null) => (v == null ? "—" : `${v.toFixed(1)}x`);
-const fmtCV = (v: number | null) => (v == null ? "—" : v.toFixed(2));
+const fmtDays = (v: number | null) => (v == null ? "—" : `${v} d`);
 const fmtPct = (v: number | null) => (v == null ? "—" : `${Math.round(v)}%`);
 
 // ── Construtores de métrica (tier + meta de próximo nível) ───────────
@@ -184,45 +182,50 @@ export function computeMaturity(m: TeamMetrics): MaturityResult {
   const bt = m.team.board_type;
   const f = m.flow;
 
-  // Derivados compartilhados. Sem dados ⇒ null ⇒ tier null ⇒ fora do min()
-  // (nunca "0%" virando Silver/Platinum falso).
-  const cycleRatio = f.deliveryCycleTime.median > 0 ? f.deliveryCycleTime.p85 / f.deliveryCycleTime.median : null;
-  const flowEffPct = f.flowEffSamples > 0 ? Math.round(f.flowEfficiency * 100) : null;
-  const sle = f.deliveryCycleTime.p85; // SLE = p85 do delivery cycle time
+  // Derivados em unidade natural. Sem dados ⇒ null ⇒ tier null ⇒ fora do min()
+  // (nunca "0" virando Silver/Platinum falso).
+  const cycleP85 = f.deliveryCycleTime.count > 0 ? f.deliveryCycleTime.p85 : null; // dias
+  // Say-Do só tem sinal com sprints fechadas QUE TÊM committed>0 (a base do
+  // sayDoRatioAvg). Guardar por sayDoSprintCount (não closedSprintCount): sem
+  // essa base, sayDoRatioAvg=0 (não null) e viraria Silver falso no tier.
+  const sayDoPct = m.scrum && m.scrum.sayDoSprintCount > 0 ? Math.round(m.scrum.sayDoRatioAvg * 100) : null; // %
+  const sle = f.deliveryCycleTime.p85; // SLE = p85 do delivery cycle time (dias)
   const agePts = m.advanced.aging.points;
   const agingBreach =
     agePts.length > 0 && sle > 0
       ? Math.round((agePts.filter((p) => p.ageDays > sle).length / agePts.length) * 100)
-      : null;
+      : null; // %
 
   let evals: MetricEval[];
   if (bt === "scrum") {
     const T = SCRUM_THRESHOLDS;
     evals = [
-      evalLB("velocityCV", "Predictability", "flow", m.scrum?.velocityCV ?? null, T.velocityCV, fmtCV),
-      evalLB("cycleRatio", "Cycle p85/p50", "flow", cycleRatio, T.cycleRatio, fmtX),
-      evalHB("flowEff", "Flow efficiency", "quality", flowEffPct, T.flowEff, fmtPct),
-      evalLB("bugRatio", "Rework (proxy)", "quality", f.bugRatio, T.bugRatio, fmtPct),
+      evalHB("sayDo", "Confiabilidade (Say-Do)", "flow", sayDoPct, T.sayDo, fmtPct),
+      evalLB("cycleP85Days", "Cycle time (p85)", "flow", cycleP85, T.cycleP85Days, fmtDays),
+      evalLB("defectRate", "Taxa de defeitos", "quality", f.bugRatio, T.defectRate, fmtPct),
     ];
   } else {
     const T = KANBAN_THRESHOLDS;
     evals = [
-      evalLB("cycleRatio", "Cycle p85/p50", "flow", cycleRatio, T.cycleRatio, fmtX),
-      evalLB("throughputCV", "Throughput stability", "flow", f.throughputCV, T.throughputCV, fmtCV),
-      evalHB("flowEff", "Flow efficiency", "quality", flowEffPct, T.flowEff, fmtPct),
-      evalLB("agingBreach", "WIP/Aging breach", "quality", agingBreach, T.agingBreach, fmtPct),
+      evalLB("cycleP85Days", "Cycle time (p85)", "flow", cycleP85, T.cycleP85Days, fmtDays),
+      evalLB("agingBreach", "Itens parados (aging)", "quality", agingBreach, T.agingBreach, fmtPct),
+      evalLB("defectRate", "Taxa de defeitos", "quality", f.bugRatio, T.defectRate, fmtPct),
     ];
   }
 
   const tiers = evals.map((e) => e.tier).filter((t): t is Tier => t != null);
-  const tier = tiers.length ? (Math.min(...tiers) as Tier) : null;
+  // Não graduar sem sinal de FLUXO: um 0% de defeitos sozinho (sem cycle time /
+  // say-do / aging) não define maturidade — daria Platinum falso a um time que
+  // só abriu issues e não entregou nada. Exige ≥1 métrica do pilar "flow".
+  const hasFlowSignal = evals.some((e) => e.pillar === "flow" && e.tier != null);
+  const tier = tiers.length && hasFlowSignal ? (Math.min(...tiers) as Tier) : null;
   const meta = tier ? TIER_META[tier] : null;
   // Elo mais fraco: métricas cujo tier == o tier do time (só relevante se não-Platinum).
   const weakest = tier != null && tier < 3 ? evals.filter((e) => e.tier === tier).map((e) => e.key) : [];
 
   // Say-Do como contexto (banda saudável 85–110%)
   const sayDo =
-    bt === "scrum" && m.scrum
+    bt === "scrum" && m.scrum && m.scrum.sayDoSprintCount > 0
       ? (() => {
           const pct = Math.round(m.scrum.sayDoRatioAvg * 100);
           const band: "low" | "healthy" | "high" = pct < 85 ? "low" : pct > 110 ? "high" : "healthy";
@@ -237,7 +240,7 @@ export function computeMaturity(m: TeamMetrics): MaturityResult {
   const note = !lowConfidence
     ? null
     : bt === "scrum"
-      ? `Poucas sprints fechadas (${m.scrum?.closedSprintCount ?? 0}) — CV de baixa confiança`
+      ? `Poucas sprints fechadas (${m.scrum?.closedSprintCount ?? 0}) — leitura de baixa confiança`
       : `Poucos itens entregues (${delivered}) — leitura de baixa confiança`;
 
   return {

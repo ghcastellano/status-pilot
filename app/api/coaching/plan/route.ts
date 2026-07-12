@@ -39,8 +39,9 @@ export async function POST(req: NextRequest) {
     }
   }
   if ("coaching" in body) patch.coaching = !!body.coaching;
+  const changedBy = typeof body?.changedBy === "string" && body.changedBy.trim() ? body.changedBy.trim().slice(0, 80) : "—";
   try {
-    const plan = await savePlan(teamId, patch);
+    const plan = await savePlan(teamId, patch, changedBy);
     return NextResponse.json({ plan });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

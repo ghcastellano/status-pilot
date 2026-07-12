@@ -38,8 +38,9 @@ export async function POST(req: NextRequest) {
   }
   const note =
     typeof body?.note === "string" && body.note.trim() ? body.note.trim().slice(0, 2000) : null;
+  const changedBy = typeof body?.changedBy === "string" && body.changedBy.trim() ? body.changedBy.trim().slice(0, 80) : "—";
   try {
-    const assessment = await saveAssessment(teamId, signals, note);
+    const assessment = await saveAssessment(teamId, signals, note, changedBy);
     return NextResponse.json({ assessment });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

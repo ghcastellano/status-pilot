@@ -5,7 +5,7 @@
  * comportamentais. Escrita otimista + flash "salvo ✓". Method-aware via boardType.
  */
 import * as React from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X, MessageSquare } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { BoardType } from "@/lib/metrics";
 import { PILLAR_LABEL, type Pillar, type Tier } from "@/lib/maturity";
+import type { ExperimentComment } from "@/lib/coaching-db";
 import {
   type CoachingPlan,
   type Experiment,
@@ -47,6 +48,119 @@ function SavedTick({ current, k, ok }: { current: string | null; k: string; ok: 
   );
 }
 
+// ── Autor (sem auth no app): nome lembrado no localStorage ────────────
+// Usado como `author` dos comentários e `changedBy` do histórico de mudanças.
+const AUTHOR_KEY = "status-pilot:author";
+export function getAuthor(): string {
+  if (typeof window === "undefined") return "Coach";
+  return (window.localStorage.getItem(AUTHOR_KEY) || "").trim() || "Coach";
+}
+
+/** Campo "Você: [nome]" — quem está registrando comentários e mudanças. */
+export function AuthorField() {
+  const [name, setName] = React.useState("");
+  React.useEffect(() => {
+    setName(window.localStorage.getItem(AUTHOR_KEY) || "");
+  }, []);
+  return (
+    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span className="whitespace-nowrap">Registrando como</span>
+      <Input
+        className="h-8 w-44 text-sm"
+        placeholder="seu nome (ex.: Ana, coach)"
+        value={name}
+        onChange={(e) => {
+          setName(e.target.value);
+          window.localStorage.setItem(AUTHOR_KEY, e.target.value.trim());
+        }}
+      />
+    </label>
+  );
+}
+
+function timeAgo(iso: string): string {
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return "agora";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}min`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.round(h / 24);
+  if (d < 30) return `${d}d`;
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+// ── Thread de comentários de um experimento (log que evolui no tempo) ──
+function CommentThread({
+  comments,
+  onAdd,
+  onDelete,
+}: {
+  comments: ExperimentComment[];
+  onAdd: (body: string) => Promise<boolean>;
+  onDelete: (id: number) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [text, setText] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const n = comments.length;
+
+  const submit = async () => {
+    const t = text.trim();
+    if (!t || busy) return;
+    setBusy(true);
+    const ok = await onAdd(t);
+    setBusy(false);
+    if (ok) setText("");
+  };
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <MessageSquare className="h-3.5 w-3.5" />
+        {n === 0 ? "Comentar" : `${n} comentário${n > 1 ? "s" : ""}`}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 border-l-2 border-border/60 pl-3">
+          {comments.map((c) => (
+            <div key={c.id} className="group text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-foreground/90">{c.author}</span>
+                <span className="text-muted-foreground/70">· {timeAgo(c.created_at)}</span>
+                <button
+                  onClick={() => onDelete(c.id)}
+                  aria-label="Excluir comentário"
+                  className="ml-auto text-muted-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+              <p className="mt-0.5 whitespace-pre-wrap text-foreground/80">{c.body}</p>
+            </div>
+          ))}
+          <div className="flex items-center gap-1.5">
+            <Input
+              className="h-8 flex-1 text-xs"
+              placeholder="Adicionar comentário — o que aconteceu?"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
+            />
+            <Button size="sm" variant="secondary" disabled={!text.trim() || busy} onClick={submit}>
+              Enviar
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Plano de coaching ────────────────────────────────────────────────
 const PLAN_FIELDS: { key: keyof CoachingPlan; label: string; placeholder: string; tone?: string }[] = [
   { key: "main_gap", label: "Gap principal", placeholder: "O maior gap do time agora" },
@@ -63,7 +177,7 @@ export function PlanCard({ teamId, initial }: { teamId: string; initial: Coachin
     fetch("/api/coaching/plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teamId, [field]: value }),
+      body: JSON.stringify({ teamId, [field]: value, changedBy: getAuthor() }),
     })
       .then((r) => {
         // só confirma o estado local no sucesso — em falha o valor anterior
@@ -131,12 +245,15 @@ export function ExperimentsCard({
   teamId,
   boardType,
   initial,
+  initialComments = [],
 }: {
   teamId: string;
   boardType: BoardType;
   initial: Experiment[];
+  initialComments?: ExperimentComment[];
 }) {
   const [exps, setExps] = React.useState<Experiment[]>(initial);
+  const [comments, setComments] = React.useState<ExperimentComment[]>(initialComments);
   const [newBehavior, setNewBehavior] = React.useState("");
   const [newPillar, setNewPillar] = React.useState<Pillar>("flow");
   const [flashKey, flash, flashOk] = useFlash();
@@ -146,7 +263,7 @@ export function ExperimentsCard({
     fetch("/api/coaching/experiments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, changedBy: getAuthor() }),
     })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => {
@@ -190,7 +307,7 @@ export function ExperimentsCard({
   const remove = (exp: Experiment) => {
     const prev = exps;
     setExps((p) => p.filter((e) => e.id !== exp.id));
-    fetch(`/api/coaching/experiments?id=${exp.id}`, { method: "DELETE" })
+    fetch(`/api/coaching/experiments?id=${exp.id}&by=${encodeURIComponent(getAuthor())}`, { method: "DELETE" })
       .then((r) => {
         if (!r.ok) {
           setExps(prev);
@@ -201,6 +318,38 @@ export function ExperimentsCard({
         setExps(prev);
         flash(`exp:${exp.id}`, false);
       });
+  };
+
+  // Comentários (log que evolui) — otimista com revert em falha.
+  const addComment = async (experimentId: number, body: string): Promise<boolean> => {
+    try {
+      const r = await fetch("/api/coaching/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId, experimentId, body, author: getAuthor() }),
+      });
+      if (!r.ok) return false;
+      const d = await r.json();
+      setComments((prev) => [...prev, d.comment as ExperimentComment]);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const removeComment = (id: number) => {
+    const target = comments.find((c) => c.id === id);
+    setComments((p) => p.filter((c) => c.id !== id));
+    // reverte SÓ este item (não um snapshot inteiro) p/ não atropelar ops concorrentes
+    const restore = () => {
+      if (!target) return;
+      setComments((p) => (p.some((c) => c.id === id) ? p : [...p, target].sort((a, b) => a.id - b.id)));
+    };
+    fetch(`/api/coaching/comments?id=${id}`, { method: "DELETE" })
+      .then((r) => {
+        if (!r.ok) restore();
+      })
+      .catch(restore);
   };
 
   const active = exps.filter((e) => e.status === "active");
@@ -287,6 +436,11 @@ export function ExperimentsCard({
                         }}
                       />
                     )}
+                    <CommentThread
+                      comments={comments.filter((c) => c.experiment_id === e.id)}
+                      onAdd={(body) => addComment(e.id, body)}
+                      onDelete={removeComment}
+                    />
                   </li>
                 ))}
               </ul>
@@ -382,7 +536,7 @@ export function SignalsCard({
     fetch("/api/coaching/signals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teamId, signals: next, note: note ?? initialNote ?? undefined }),
+      body: JSON.stringify({ teamId, signals: next, note: note ?? initialNote ?? undefined, changedBy: getAuthor() }),
     })
       .then((r) => flash(k, r.ok))
       .catch(() => flash(k, false));

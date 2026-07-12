@@ -121,8 +121,8 @@ function MaturityLevelPanel({ team, mat, m, history }: { team: DashboardMaturity
           </div>
         </div>
 
-        {/* KPIs (as 4 métricas do método) com meta */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {/* KPIs (as 3 métricas do método) com meta */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {mat.metrics.map((mt) => (
             <MetricKpi key={mt.key} mt={mt} />
           ))}
@@ -230,19 +230,19 @@ function PillarSection({ pillar, team, mat, m }: { pillar: Pillar; team: Dashboa
   if (pillar === "flow") {
     if (isScrum && m.scrum) {
       charts.push(
-        <ChartCard key="vel" title="Velocity por sprint" hint="Consistência da velocity → Predictability">
+        <ChartCard key="vel" title="Velocity por sprint" hint="Contexto — quanto o time entrega por sprint (não entra no tier)">
           <VelocityBar data={m.scrum.velocity} />
         </ChartCard>
       );
     } else {
       charts.push(
-        <ChartCard key="tp" title="Throughput por semana" hint="Estabilidade da cadência → Throughput CV">
+        <ChartCard key="tp" title="Throughput por semana" hint="Contexto — itens entregues por semana (não entra no tier)">
           <ThroughputBar series={m.flow.throughput.series} />
         </ChartCard>
       );
     }
     charts.push(
-      <ChartCard key="cyc" title="Cycle time — distribuição (p50/p85)" hint="Previsibilidade da entrega → Cycle p85/p50">
+      <ChartCard key="cyc" title="Cycle time — distribuição (p50/p85)" hint="Previsibilidade da entrega → Cycle time (p85), em dias">
         <CycleScatter data={m.flow.scatter} p50={m.flow.deliveryCycleTime.median} p85={m.flow.deliveryCycleTime.p85} />
       </ChartCard>
     );
@@ -256,10 +256,10 @@ function PillarSection({ pillar, team, mat, m }: { pillar: Pillar; team: Dashboa
       );
     }
     charts.push(
-      <ChartCard key="aging" title="Work item aging" hint="Itens envelhecendo em fluxo → WIP/Aging">
+      <ChartCard key="aging" title="Work item aging" hint="Itens parados além do normal → Itens parados (aging)">
         <AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} />
       </ChartCard>,
-      <ChartCard key="hist" title="Histograma de cycle time" hint="Dispersão da entrega → Flow efficiency">
+      <ChartCard key="hist" title="Histograma de cycle time" hint="Contexto — dispersão do tempo de entrega (em dias)">
         <CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} />
       </ChartCard>
     );

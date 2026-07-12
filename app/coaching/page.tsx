@@ -19,6 +19,7 @@ import {
   type PortfolioBoard,
 } from "@/components/coaching-portfolio";
 import { TeamDetailPanel, type TeamDetail } from "@/components/coaching-detail";
+import { getAuthor } from "@/components/coaching-cards";
 
 const j = (r: Response) =>
   r.ok ? r.json() : r.json().then((e: any) => Promise.reject(new Error(e.error ?? "Falha ao carregar")));
@@ -80,7 +81,7 @@ export default function CoachingPage() {
     fetch("/api/coaching/plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teamId, coaching }),
+      body: JSON.stringify({ teamId, coaching, changedBy: getAuthor() }),
     })
       .then(() => loadPortfolio())
       .catch(() => loadPortfolio());

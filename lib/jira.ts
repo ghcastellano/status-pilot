@@ -1,12 +1,21 @@
 /**
  * lib/jira.ts — cliente mínimo da Jira Cloud REST API v3.
  *
- * Autenticação: Basic com email + API token (base64).
- *   Authorization: Basic base64(email:token)
+ * Dois modos de autenticação, atrás da MESMA interface `JiraProvider`:
+ *   1. Basic (email + API token) — `JiraClient`. Usado por scripts/lib/sync.ts
+ *      (Node/tsx), base `https://SEUNOME.atlassian.net`.
+ *   2. OAuth 2.0 (3LO) — `OAuthProvider`. Resolve token/cloudId da tabela
+ *      `jira_connections`, base `https://api.atlassian.com/ex/jira/{cloudId}`,
+ *      com auto-refresh do access_token.
  * Docs: https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/
  *
- * Usado pelos scripts de populate e sync (Node/tsx) — não vai para o frontend.
+ * Nada aqui vai para o frontend (usa fetch server-side + segredos).
  */
+import {
+  getJiraConnection,
+  saveJiraConnection,
+  type JiraConnection,
+} from "./jira-connections";
 
 export interface JiraConfig {
   baseUrl: string; // https://SEUNOME.atlassian.net
@@ -32,44 +41,80 @@ export function jiraConfigFromEnv(): JiraConfig {
   return { baseUrl: baseUrl.replace(/\/$/, ""), email, token, scrumKey, kanbanKey };
 }
 
-export class JiraClient {
-  private authHeader: string;
-  constructor(private cfg: JiraConfig) {
-    this.authHeader =
-      "Basic " + Buffer.from(`${cfg.email}:${cfg.token}`).toString("base64");
-  }
+/**
+ * Superfície de rede da Jira — os 11 métodos que scripts/sync usam. `raw` é
+ * load-bearing (toda chamada Agile/admin passa por ele). Implementado por
+ * `JiraClient` (Basic) e `OAuthProvider` (3LO).
+ */
+export interface JiraProvider {
+  raw<T = any>(method: string, path: string, body?: unknown): Promise<T>;
+  myself(): Promise<{ accountId: string; displayName: string; emailAddress?: string }>;
+  fields(): Promise<Array<{ id: string; name: string; custom: boolean }>>;
+  projects(): Promise<Array<{ key: string; name: string; id: string }>>;
+  issueTypesForProject(projectKey: string): Promise<Array<{ id: string; name: string }>>;
+  projectStatuses(
+    projectKey: string
+  ): Promise<Array<{ name: string; statuses: Array<{ id: string; name: string }> }>>;
+  createIssue(
+    fields: Record<string, unknown>
+  ): Promise<{ id: string; key: string; self: string }>;
+  editIssue(issueKey: string, fields: Record<string, unknown>): Promise<void>;
+  transitions(
+    issueKey: string
+  ): Promise<{ transitions: Array<{ id: string; name: string; to: { name: string } }> }>;
+  doTransition(issueKey: string, transitionId: string): Promise<void>;
+  searchJql(jql: string, fields: string[], maxResults?: number): Promise<JiraIssue[]>;
+}
 
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: unknown
-  ): Promise<T> {
-    const res = await fetch(`${this.cfg.baseUrl}${path}`, {
-      method,
-      headers: {
-        Authorization: this.authHeader,
-        Accept: "application/json",
-        "X-Atlassian-Token": "no-check",
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Jira ${method} ${path} → ${res.status}: ${text.slice(0, 500)}`);
-    }
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
+/**
+ * Lógica de request compartilhada — UM lugar só. Parametrizada por `getBase`,
+ * que resolve (a) a URL base e (b) o header Authorization a cada chamada
+ * (necessário para o OAuth, que pode renovar o token antes de cada request).
+ */
+async function jiraRequest<T>(
+  getBase: () => Promise<{ baseUrl: string; authHeader: string }>,
+  method: string,
+  path: string,
+  body?: unknown
+): Promise<T> {
+  const { baseUrl, authHeader } = await getBase();
+  const res = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers: {
+      Authorization: authHeader,
+      Accept: "application/json",
+      "X-Atlassian-Token": "no-check",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Jira ${method} ${path} → ${res.status}: ${text.slice(0, 500)}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+/**
+ * Base abstrata: implementa os 11 métodos em cima de `jiraRequest`. As
+ * subclasses só precisam dizer COMO montar base/header via `getBase()`.
+ */
+abstract class JiraBase implements JiraProvider {
+  protected abstract getBase(): Promise<{ baseUrl: string; authHeader: string }>;
+
+  private req<T>(method: string, path: string, body?: unknown): Promise<T> {
+    return jiraRequest<T>(() => this.getBase(), method, path, body);
   }
 
   /** Acesso genérico (para sondagem/capacidades da API). */
   raw<T = any>(method: string, path: string, body?: unknown) {
-    return this.request<T>(method, path, body);
+    return this.req<T>(method, path, body);
   }
 
   /** Verifica credenciais. Retorna o usuário autenticado. */
   myself() {
-    return this.request<{ accountId: string; displayName: string; emailAddress?: string }>(
+    return this.req<{ accountId: string; displayName: string; emailAddress?: string }>(
       "GET",
       "/rest/api/3/myself"
     );
@@ -77,7 +122,7 @@ export class JiraClient {
 
   /** Lista os campos para descobrir o id do "Story Points". */
   fields() {
-    return this.request<Array<{ id: string; name: string; custom: boolean }>>(
+    return this.req<Array<{ id: string; name: string; custom: boolean }>>(
       "GET",
       "/rest/api/3/field"
     );
@@ -85,7 +130,7 @@ export class JiraClient {
 
   /** Projetos visíveis para o usuário. */
   async projects(): Promise<Array<{ key: string; name: string; id: string }>> {
-    const data = await this.request<{ values: Array<{ key: string; name: string; id: string }> }>(
+    const data = await this.req<{ values: Array<{ key: string; name: string; id: string }> }>(
       "GET",
       "/rest/api/3/project/search?maxResults=50"
     );
@@ -96,7 +141,7 @@ export class JiraClient {
   async issueTypesForProject(
     projectKey: string
   ): Promise<Array<{ id: string; name: string }>> {
-    const data = await this.request<{
+    const data = await this.req<{
       projects: Array<{ issuetypes: Array<{ id: string; name: string }> }>;
     }>(
       "GET",
@@ -107,27 +152,13 @@ export class JiraClient {
 
   /** Status disponíveis no projeto, agrupados por tipo de issue. */
   projectStatuses(projectKey: string) {
-    return this.request<
+    return this.req<
       Array<{ name: string; statuses: Array<{ id: string; name: string }> }>
     >("GET", `/rest/api/3/project/${projectKey}/statuses`);
   }
 
-  /** Converte texto simples em ADF (Atlassian Document Format). */
-  static adf(text: string) {
-    return {
-      type: "doc",
-      version: 1,
-      content: text
-        .split("\n")
-        .map((line) => ({
-          type: "paragraph",
-          content: line ? [{ type: "text", text: line }] : [],
-        })),
-    };
-  }
-
   createIssue(fields: Record<string, unknown>) {
-    return this.request<{ id: string; key: string; self: string }>(
+    return this.req<{ id: string; key: string; self: string }>(
       "POST",
       "/rest/api/3/issue",
       { fields }
@@ -136,19 +167,19 @@ export class JiraClient {
 
   /** Edita campos de uma issue (PUT). Retorna 204. */
   editIssue(issueKey: string, fields: Record<string, unknown>) {
-    return this.request<void>("PUT", `/rest/api/3/issue/${issueKey}`, { fields });
+    return this.req<void>("PUT", `/rest/api/3/issue/${issueKey}`, { fields });
   }
 
   /** Transições disponíveis para uma issue. */
   transitions(issueKey: string) {
-    return this.request<{ transitions: Array<{ id: string; name: string; to: { name: string } }> }>(
+    return this.req<{ transitions: Array<{ id: string; name: string; to: { name: string } }> }>(
       "GET",
       `/rest/api/3/issue/${issueKey}/transitions`
     );
   }
 
   doTransition(issueKey: string, transitionId: string) {
-    return this.request<void>("POST", `/rest/api/3/issue/${issueKey}/transitions`, {
+    return this.req<void>("POST", `/rest/api/3/issue/${issueKey}/transitions`, {
       transition: { id: transitionId },
     });
   }
@@ -164,7 +195,7 @@ export class JiraClient {
     do {
       const body: Record<string, unknown> = { jql, fields, maxResults };
       if (nextPageToken) body.nextPageToken = nextPageToken;
-      const data = await this.request<{
+      const data = await this.req<{
         issues: JiraIssue[];
         nextPageToken?: string;
         isLast?: boolean;
@@ -174,6 +205,139 @@ export class JiraClient {
     } while (nextPageToken);
     return all;
   }
+}
+
+/**
+ * Cliente Basic (email + API token). Superfície pública INALTERADA:
+ * `new JiraClient(jiraConfigFromEnv())`, `JiraClient.adf(text)`, os 11 métodos.
+ */
+export class JiraClient extends JiraBase implements JiraProvider {
+  private authHeader: string;
+  constructor(private cfg: JiraConfig) {
+    super();
+    this.authHeader =
+      "Basic " + Buffer.from(`${cfg.email}:${cfg.token}`).toString("base64");
+  }
+
+  protected async getBase() {
+    return { baseUrl: this.cfg.baseUrl, authHeader: this.authHeader };
+  }
+
+  /** Converte texto simples em ADF (Atlassian Document Format). */
+  static adf(text: string) {
+    return {
+      type: "doc",
+      version: 1,
+      content: text
+        .split("\n")
+        .map((line) => ({
+          type: "paragraph",
+          content: line ? [{ type: "text", text: line }] : [],
+        })),
+    };
+  }
+}
+
+/**
+ * Cliente OAuth 2.0 (3LO). Resolve access_token + cloudId de `jira_connections`
+ * a cada request e renova o token automaticamente quando está perto de expirar.
+ */
+export class OAuthProvider extends JiraBase implements JiraProvider {
+  // Dedupe de refresh concorrente: o refresh_token rotaciona a cada uso, então N
+  // requests perto do vencimento não podem disparar N refreshes (revogaria a
+  // token family). Todos aguardam o mesmo refresh em voo.
+  private static refreshing: Promise<JiraConnection> | null = null;
+  // Cache da conexão na instância: evita reler o Supabase a cada request (um
+  // sync faz dezenas de chamadas). Revalida só perto do vencimento.
+  private cached: JiraConnection | null = null;
+
+  protected async getBase(): Promise<{ baseUrl: string; authHeader: string }> {
+    const conn = await this.ensureFreshConnection();
+    return {
+      baseUrl: `https://api.atlassian.com/ex/jira/${conn.cloud_id}`,
+      authHeader: `Bearer ${conn.access_token}`,
+    };
+  }
+
+  private fresh(conn: JiraConnection): boolean {
+    const expMs = Date.parse(conn.expires_at);
+    return Number.isFinite(expMs) && expMs - Date.now() > 60_000;
+  }
+
+  /** Garante um access_token válido (renova se faltar < ~60s p/ expirar ou se
+   *  expires_at for inválido). Usa cache da instância; refresh é deduplicado. */
+  private async ensureFreshConnection(): Promise<JiraConnection> {
+    if (this.cached && this.fresh(this.cached)) return this.cached;
+    const conn = await getJiraConnection();
+    if (!conn) {
+      throw new Error("Jira não conectado — autorize em /api/jira/connect");
+    }
+    if (this.fresh(conn)) {
+      this.cached = conn;
+      return conn;
+    }
+    if (!OAuthProvider.refreshing) {
+      OAuthProvider.refreshing = this.refresh(conn).finally(() => {
+        OAuthProvider.refreshing = null;
+      });
+    }
+    this.cached = await OAuthProvider.refreshing;
+    return this.cached;
+  }
+
+  private async refresh(conn: JiraConnection): Promise<JiraConnection> {
+    const clientId = process.env.JIRA_OAUTH_CLIENT_ID;
+    const clientSecret = process.env.JIRA_OAUTH_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      throw new Error(
+        "JIRA_OAUTH_CLIENT_ID e JIRA_OAUTH_CLIENT_SECRET são obrigatórias para renovar o token."
+      );
+    }
+    if (!conn.refresh_token) {
+      throw new Error("Sem refresh_token — reconecte em /api/jira/connect");
+    }
+    const res = await fetch("https://auth.atlassian.com/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grant_type: "refresh_token",
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: conn.refresh_token,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Jira OAuth refresh → ${res.status}: ${text.slice(0, 500)}`);
+    }
+    const data = (await res.json()) as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+      scope?: string;
+    };
+    const updated: JiraConnection = {
+      ...conn,
+      access_token: data.access_token,
+      // a Atlassian rotaciona o refresh_token; se vier um novo, guarda-o.
+      refresh_token: data.refresh_token ?? conn.refresh_token,
+      expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+      scopes: data.scope ?? conn.scopes,
+    };
+    await saveJiraConnection(updated);
+    return updated;
+  }
+}
+
+/**
+ * Factory (uso futuro): OAuth quando `JIRA_OAUTH_CLIENT_ID` está setado, senão
+ * o cliente Basic. NÃO é usado por scripts/sync — esses seguem com
+ * `new JiraClient(jiraConfigFromEnv())`. A conexão do OAuth é resolvida
+ * preguiçosamente por request (construção é síncrona).
+ */
+export function jiraProviderFromEnv(): JiraProvider {
+  if (process.env.JIRA_OAUTH_CLIENT_ID) return new OAuthProvider();
+  return new JiraClient(jiraConfigFromEnv());
 }
 
 export interface JiraIssue {

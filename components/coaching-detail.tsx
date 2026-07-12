@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { CycleScatter, VelocityBar, ThroughputBar } from "@/components/charts";
 import { MaturityHistoryChart, type MaturityWeek } from "@/components/charts-maturity";
-import { PlanCard, ExperimentsCard, SignalsCard } from "@/components/coaching-cards";
-import { STATUS_META } from "@/lib/coaching";
+import { PlanCard, ExperimentsCard, SignalsCard, AuthorField } from "@/components/coaching-cards";
+import { STATUS_META, RUBRIC, signalDefs } from "@/lib/coaching";
 import type { CoachingPlan, Experiment, EngagementStatus } from "@/lib/coaching";
+import type { ExperimentComment, FieldHistoryRow } from "@/lib/coaching-db";
 import {
   type MaturityResult,
   type MetricEval,
@@ -19,8 +20,7 @@ import {
   PILLAR_LABEL,
   TIER_META,
   tierTextClass,
-  SCRUM_THRESHOLDS,
-  KANBAN_THRESHOLDS,
+  maturityReference,
 } from "@/lib/maturity";
 
 export interface TeamDetail {
@@ -32,6 +32,8 @@ export interface TeamDetail {
   plan: CoachingPlan | null;
   assessment: { signals: Record<string, string>; note: string | null } | null;
   experiments: Experiment[];
+  comments?: ExperimentComment[];
+  fieldHistory?: FieldHistoryRow[];
   evidence: {
     scatter: { doneDate: string; cycleDays: number; key: string; title: string }[];
     cycleP50: number;
@@ -46,6 +48,8 @@ const QUANT_PILLARS: Pillar[] = ["flow", "quality"];
 export function TeamDetailPanel({ d }: { d: TeamDetail }) {
   const [showEvidence, setShowEvidence] = React.useState(false);
   const { team, maturity: mat, history, plan, assessment, experiments, evidence } = d;
+  const comments = d.comments ?? [];
+  const fieldHistory = d.fieldHistory ?? [];
   const isScrum = team.board_type === "scrum";
   const weakest = new Set(mat.weakest);
   const limiting = mat.metrics.filter((m) => weakest.has(m.key));
@@ -84,26 +88,13 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
             </p>
           )}
           {mat.note && <p className="mt-1 text-xs text-amber-600">⚠ {mat.note}</p>}
+          {mat.sayDo?.band === "high" && (
+            <p className="mt-1 text-xs text-amber-600">
+              ⚠ Say-Do em {mat.sayDo.pct}% — possível sub-commit (planejamento conservador). Não penaliza o tier.
+            </p>
+          )}
         </div>
-        {mat.sayDo && (
-          <Card className="px-4 py-3">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Say-Do (contexto)</p>
-            <div className="mt-0.5 flex items-baseline gap-1.5">
-              <span
-                className={cn(
-                  "text-2xl font-semibold tabular-nums",
-                  mat.sayDo.band === "healthy" ? "text-primary" : mat.sayDo.band === "high" ? "text-amber-600" : "text-destructive"
-                )}
-              >
-                {mat.sayDo.pct}%
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {mat.sayDo.band === "healthy" ? "banda saudável" : mat.sayDo.band === "high" ? "sandbagging?" : "sub-entrega"}
-              </span>
-            </div>
-            <p className="mt-0.5 text-[10px] text-muted-foreground/70">não é driver de tier · banda 85–110%</p>
-          </Card>
-        )}
+        <AuthorField />
       </div>
 
       {/* Histórico */}
@@ -151,7 +142,7 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <PlanCard teamId={team.id} initial={plan} />
-          <ExperimentsCard teamId={team.id} boardType={team.board_type} initial={experiments} />
+          <ExperimentsCard teamId={team.id} boardType={team.board_type} initial={experiments} initialComments={comments} />
         </div>
         <SignalsCard
           teamId={team.id}
@@ -161,6 +152,9 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
           initialNote={assessment?.note ?? null}
         />
       </div>
+
+      {/* Histórico de mudanças — só o que mudou de fato (old→new) */}
+      <HistoryPanel entries={fieldHistory} boardType={team.board_type} />
 
       {/* Evidência das métricas — recolhível */}
       <div>
@@ -176,7 +170,7 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
             <Card>
               <CardHeader>
                 <CardTitle>Cycle time — distribuição (p50 / p85)</CardTitle>
-                <p className="text-sm text-muted-foreground">Base da métrica “Cycle p85/p50”.</p>
+                <p className="text-sm text-muted-foreground">Base da métrica “Cycle time (p85)”, em dias.</p>
               </CardHeader>
               <CardContent>
                 <CycleScatter data={evidence.scatter} p50={evidence.cycleP50} p85={evidence.cycleP85} />
@@ -186,7 +180,7 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
               <Card>
                 <CardHeader>
                   <CardTitle>Velocity por sprint</CardTitle>
-                  <p className="text-sm text-muted-foreground">Base da métrica “Predictability” (CV da velocity).</p>
+                  <p className="text-sm text-muted-foreground">Contexto — velocity por sprint; não entra no tier.</p>
                 </CardHeader>
                 <CardContent>
                   <VelocityBar data={evidence.velocity} />
@@ -196,7 +190,7 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
               <Card>
                 <CardHeader>
                   <CardTitle>Throughput por semana</CardTitle>
-                  <p className="text-sm text-muted-foreground">Base da métrica “Throughput stability” (CV semanal).</p>
+                  <p className="text-sm text-muted-foreground">Contexto — throughput por semana; não entra no tier.</p>
                 </CardHeader>
                 <CardContent>
                   <ThroughputBar series={evidence.throughputSeries} />
@@ -245,25 +239,14 @@ function MetricRow({ mt, isWeak }: { mt: MetricEval; isWeak: boolean }) {
 }
 
 function ThresholdReference({ boardType }: { boardType: "scrum" | "kanban" }) {
-  const rows =
-    boardType === "scrum"
-      ? [
-          ["Predictability (velocity CV)", `< ${SCRUM_THRESHOLDS.velocityCV.platinumBelow}`, `> ${SCRUM_THRESHOLDS.velocityCV.silverAbove}`],
-          ["Cycle p85/p50", `< ${SCRUM_THRESHOLDS.cycleRatio.platinumBelow}x`, `> ${SCRUM_THRESHOLDS.cycleRatio.silverAbove}x`],
-          ["Flow efficiency", `> ${SCRUM_THRESHOLDS.flowEff.platinumMin}%`, `< ${SCRUM_THRESHOLDS.flowEff.silverBelow}%`],
-          ["Rework (proxy: bug ratio)", `< ${SCRUM_THRESHOLDS.bugRatio.platinumBelow}%`, `> ${SCRUM_THRESHOLDS.bugRatio.silverAbove}%`],
-        ]
-      : [
-          ["Cycle p85/p50", `< ${KANBAN_THRESHOLDS.cycleRatio.platinumBelow}x`, `> ${KANBAN_THRESHOLDS.cycleRatio.silverAbove}x`],
-          ["Throughput stability (CV)", `< ${KANBAN_THRESHOLDS.throughputCV.platinumBelow}`, `> ${KANBAN_THRESHOLDS.throughputCV.silverAbove}`],
-          ["Flow efficiency", `> ${KANBAN_THRESHOLDS.flowEff.platinumMin}%`, `< ${KANBAN_THRESHOLDS.flowEff.silverBelow}%`],
-          ["WIP/Aging breach", `< ${KANBAN_THRESHOLDS.agingBreach.platinumBelow}%`, `> ${KANBAN_THRESHOLDS.agingBreach.silverAbove}%`],
-        ];
+  const ref = maturityReference(boardType); // fonte única (mesma do dashboard)
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Thresholds — {boardType === "scrum" ? "Scrum" : "Kanban"}</CardTitle>
-        <p className="text-sm text-muted-foreground">Valores propostos, ainda a calibrar com dados de campo.</p>
+        <CardTitle>Referência de maturidade — {boardType === "scrum" ? "Scrum" : "Kanban"}</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          O que leva a cada tier, em unidades naturais (dias, %). Valores propostos, a calibrar com dados de campo.
+        </p>
       </CardHeader>
       <CardContent>
         <table className="w-full text-sm">
@@ -271,20 +254,114 @@ function ThresholdReference({ boardType }: { boardType: "scrum" | "kanban" }) {
             <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
               <th className="pb-2 font-medium">Métrica</th>
               <th className="pb-2 font-medium text-platinum-foreground">Platinum</th>
+              <th className="pb-2 font-medium text-gold-foreground">Gold</th>
               <th className="pb-2 font-medium text-silver-foreground">Silver</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r[0]} className="border-t border-border/60">
-                <td className="py-1.5 pr-2">{r[0]}</td>
-                <td className="py-1.5 tabular-nums text-platinum-foreground">{r[1]}</td>
-                <td className="py-1.5 tabular-nums text-silver-foreground">{r[2]}</td>
+            {ref.map((r) => (
+              <tr key={r.label} className="border-t border-border/60">
+                <td className="py-1.5 pr-2">{r.label}</td>
+                <td className="py-1.5 tabular-nums text-platinum-foreground">{r.platinum}</td>
+                <td className="py-1.5 tabular-nums text-gold-foreground">{r.gold}</td>
+                <td className="py-1.5 tabular-nums text-silver-foreground">{r.silver}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </CardContent>
     </Card>
+  );
+}
+
+// ── Histórico de mudanças (diff old→new) ─────────────────────────────
+const SECTION_LABEL: Record<string, string> = { plan: "Plano", experiment: "Experimento", signal: "Sinais" };
+const FIELD_LABEL: Record<string, string> = {
+  main_gap: "Gap principal", hypothesis: "Hipótese", next_step: "Próximo passo", ask: "Ask",
+  review_at: "Check-in", coach: "Coach", coaching: "No programa", behavior: "Comportamento",
+  metric: "Métrica", outcome: "Resultado", status: "Status", pillar: "Pilar", note: "Nota",
+};
+
+function labelFor(section: string, field: string, boardType: "scrum" | "kanban"): string {
+  if (section === "signal" && field !== "note") {
+    return signalDefs(boardType).find((s) => s.key === field)?.label ?? field;
+  }
+  return FIELD_LABEL[field] ?? field;
+}
+
+function valueFor(section: string, field: string, v: string | null): string {
+  if (v == null) return "—";
+  if (section === "signal" && field !== "note") return RUBRIC[v as keyof typeof RUBRIC]?.label ?? v;
+  if (section === "plan" && field === "coaching") return v === "true" ? "sim" : "não";
+  return v;
+}
+
+function HistoryEntryRow({ e, boardType }: { e: FieldHistoryRow; boardType: "scrum" | "kanban" }) {
+  const when = new Date(e.changed_at).toLocaleString("pt-BR", {
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+  let change: React.ReactNode;
+  if (e.field === "created") {
+    change = <span className="text-primary">criou «{e.entity_label}»</span>;
+  } else if (e.field === "deleted") {
+    change = <span className="text-destructive line-through">removeu «{e.entity_label}»</span>;
+  } else {
+    const label = labelFor(e.section, e.field, boardType);
+    const oldV = valueFor(e.section, e.field, e.old_value);
+    const newV = valueFor(e.section, e.field, e.new_value);
+    if (e.old_value == null) {
+      change = (<><span className="text-muted-foreground">{label}:</span> <span className="text-primary">{newV}</span></>);
+    } else if (e.new_value == null) {
+      change = (<><span className="text-muted-foreground">{label}:</span> <span className="text-muted-foreground/60 line-through">{oldV}</span> <span className="text-muted-foreground">(limpo)</span></>);
+    } else {
+      change = (<><span className="text-muted-foreground">{label}:</span> <span className="text-muted-foreground/60 line-through">{oldV}</span> <span className="text-primary">→ {newV}</span></>);
+    }
+  }
+  return (
+    <li className="flex flex-col gap-0.5 py-1.5 sm:flex-row sm:items-baseline sm:gap-3">
+      <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground/70 sm:w-28">{when}</span>
+      <span className="min-w-0 flex-1 text-xs">
+        {e.section === "experiment" && e.entity_label && e.field !== "created" && e.field !== "deleted" && (
+          <span className="mr-1 text-muted-foreground/70">[{e.entity_label}]</span>
+        )}
+        {change}
+      </span>
+      <span className="shrink-0 text-[11px] text-muted-foreground/60">
+        {e.changed_by} · {SECTION_LABEL[e.section] ?? e.section}
+      </span>
+    </li>
+  );
+}
+
+function HistoryPanel({ entries, boardType }: { entries: FieldHistoryRow[]; boardType: "scrum" | "kanban" }) {
+  const [open, setOpen] = React.useState(false);
+  if (entries.length === 0) return null;
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+        Histórico de mudanças ({entries.length}) {open ? "" : "— mostrar"}
+      </button>
+      {open && (
+        <Card className="mt-3">
+          <CardHeader>
+            <CardTitle>Histórico de mudanças</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Só o que mudou de fato — cada linha é um valor alterado (de → para), com autor e data.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border/50">
+              {entries.map((e) => (
+                <HistoryEntryRow key={e.id} e={e} boardType={boardType} />
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
