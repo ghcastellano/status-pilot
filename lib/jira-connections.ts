@@ -18,14 +18,14 @@ export interface JiraConnection {
   account_name: string | null;
 }
 
-const COLS =
-  "cloud_id, site_url, access_token, refresh_token, expires_at, scopes, account_id, account_name";
-
 export async function getJiraConnection(): Promise<JiraConnection | null> {
   const sb = getSupabaseAdmin();
+  // select("*") em vez de colunas nomeadas: o PostgREST do Supabase pode ter o
+  // schema cache defasado p/ uma coluna adicionada via ALTER (ex.: account_name),
+  // e um select nomeado dessa coluna volta vazio no runtime do Vercel.
   const { data, error } = await sb
     .from("jira_connections")
-    .select(COLS)
+    .select("*")
     .eq("id", "default")
     .maybeSingle();
   if (error) throw new Error(error.message);
