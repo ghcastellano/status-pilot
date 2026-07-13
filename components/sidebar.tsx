@@ -7,10 +7,10 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/config", label: "Configurar Jira", icon: Settings },
+  { href: "/coaching", label: "Coaching", icon: Trophy },
   { href: "/ask", label: "Perguntar", icon: MessageSquareText },
   { href: "/report", label: "Status Report", icon: FileText },
-  { href: "/coaching", label: "Coaching", icon: Trophy },
-  { href: "/config", label: "Configurar", icon: Settings },
 ];
 
 export function Sidebar() {

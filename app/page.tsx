@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { RefreshCw, Sparkles, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { RefreshCw, Sparkles, ChevronDown, Plug } from "lucide-react";
 import { useTeam } from "@/components/team-context";
 import { KpiCard } from "@/components/kpi-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -19,7 +20,7 @@ const PERIODS = [
 ];
 
 export default function DashboardPage() {
-  const { selectedTeam } = useTeam();
+  const { selectedTeam, teams, loading: teamsLoading } = useTeam();
   const [m, setM] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState<string | null>(null);
@@ -118,6 +119,27 @@ export default function DashboardPage() {
       setSyncing(false);
       setTimeout(() => setSyncMsg(null), 4000);
     }
+  }
+
+  // Onboarding: sem times configurados → conectar Jira (fluxo multi-empresa)
+  if (!teamsLoading && teams.length === 0) {
+    return (
+      <div className="mx-auto max-w-lg py-20 text-center">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Plug className="h-6 w-6" />
+        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">Conecte seu Jira para começar</h1>
+        <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+          Nenhum time configurado ainda. Conecte o Jira da sua empresa e escolha os projetos que quer
+          analisar — a maturidade sai de dados reais.
+        </p>
+        <Link href="/config">
+          <Button className="mt-6">
+            <Plug className="h-4 w-4" /> Ir para Configurar
+          </Button>
+        </Link>
+      </div>
+    );
   }
 
   if (loading && !m) {
