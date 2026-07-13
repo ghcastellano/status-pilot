@@ -4,7 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { RefreshCw, Sparkles, ChevronDown, Plug } from "lucide-react";
 import { useTeam } from "@/components/team-context";
-import { useT } from "@/components/lang-context";
+import { useT, useLang } from "@/components/lang-context";
+import { buildChartInsights } from "@/lib/chart-insights";
 import { KpiCard } from "@/components/kpi-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,8 +21,20 @@ const PERIODS = [
   { v: "12", label: "12 semanas" },
 ];
 
+/** Nota concreta (números reais) abaixo de um gráfico. */
+function ChartNote({ text }: { text?: string }) {
+  if (!text) return null;
+  return (
+    <p className="mt-3 flex items-start gap-1.5 border-t border-border/60 pt-3 text-xs leading-snug text-foreground/80">
+      <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+      <span>{text}</span>
+    </p>
+  );
+}
+
 export default function DashboardPage() {
   const t = useT();
+  const { lang } = useLang();
   const { selectedTeam, teams, loading: teamsLoading } = useTeam();
   const [m, setM] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
@@ -151,6 +164,7 @@ export default function DashboardPage() {
   const adv = m.advanced;
   const isScrum = m.team.board_type === "scrum";
   const stageOrder: string[] = adv.cfd.stages.map((s: any) => s.jira);
+  const ci = buildChartInsights(m, lang);
 
   return (
     <div className="space-y-6">
@@ -263,6 +277,7 @@ export default function DashboardPage() {
         <CardHeader><CardTitle>Cycle time — distribuição e tendência</CardTitle></CardHeader>
         <CardContent>
           <CycleScatter data={f.scatter} p50={f.deliveryCycleTime.median} p85={f.deliveryCycleTime.p85} />
+          <ChartNote text={ci.cycle} />
           {insights?.chart && (
             <p className="mt-3 flex items-start gap-1.5 border-t border-border/60 pt-3 text-xs leading-snug text-foreground/80">
               <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
@@ -289,27 +304,27 @@ export default function DashboardPage() {
               <section className="grid gap-4 lg:grid-cols-2">
                 <Card>
                   <CardHeader><CardTitle>Velocity por sprint</CardTitle></CardHeader>
-                  <CardContent><VelocityBar data={m.scrum.velocity} /></CardContent>
+                  <CardContent><VelocityBar data={m.scrum.velocity} /><ChartNote text={ci.velocity} /></CardContent>
                 </Card>
                 {m.scrum.currentSprint ? (
                   <Card>
                     <CardHeader><CardTitle>Sprint burndown — {m.scrum.currentSprint.name}</CardTitle></CardHeader>
-                    <CardContent><BurndownLine data={m.scrum.burndown} /></CardContent>
+                    <CardContent><BurndownLine data={m.scrum.burndown} /><ChartNote text={ci.burndown} /></CardContent>
                   </Card>
                 ) : (
                   <Card>
                     <CardHeader><CardTitle>Cycle time histogram</CardTitle></CardHeader>
-                    <CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /></CardContent>
+                    <CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /><ChartNote text={ci.histogram} /></CardContent>
                   </Card>
                 )}
                 <Card>
                   <CardHeader><CardTitle>Work item aging</CardTitle></CardHeader>
-                  <CardContent><AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} /></CardContent>
+                  <CardContent><AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} /><ChartNote text={ci.aging} /></CardContent>
                 </Card>
                 {m.scrum.currentSprint && (
                   <Card>
                     <CardHeader><CardTitle>Cycle time histogram</CardTitle></CardHeader>
-                    <CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /></CardContent>
+                    <CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /><ChartNote text={ci.histogram} /></CardContent>
                   </Card>
                 )}
               </section>
@@ -318,13 +333,13 @@ export default function DashboardPage() {
               <>
                 <Card>
                   <CardHeader><CardTitle>Cumulative Flow Diagram (CFD)</CardTitle></CardHeader>
-                  <CardContent><CFDChart stages={adv.cfd.stages} points={adv.cfd.points} /></CardContent>
+                  <CardContent><CFDChart stages={adv.cfd.stages} points={adv.cfd.points} /><ChartNote text={ci.cfd} /></CardContent>
                 </Card>
                 <section className="grid gap-4 lg:grid-cols-2">
-                  <Card><CardHeader><CardTitle>Evolução (throughput · WIP · cycle time)</CardTitle></CardHeader><CardContent><TrendsChart data={adv.trends} /></CardContent></Card>
-                  <Card><CardHeader><CardTitle>Throughput por semana</CardTitle></CardHeader><CardContent><ThroughputBar series={f.throughput.series} /></CardContent></Card>
-                  <Card><CardHeader><CardTitle>Work item aging</CardTitle></CardHeader><CardContent><AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} /></CardContent></Card>
-                  <Card><CardHeader><CardTitle>Cycle time histogram</CardTitle></CardHeader><CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /></CardContent></Card>
+                  <Card><CardHeader><CardTitle>Evolução (throughput · WIP · cycle time)</CardTitle></CardHeader><CardContent><TrendsChart data={adv.trends} /><ChartNote text={ci.trends} /></CardContent></Card>
+                  <Card><CardHeader><CardTitle>Throughput por semana</CardTitle></CardHeader><CardContent><ThroughputBar series={f.throughput.series} /><ChartNote text={ci.throughput} /></CardContent></Card>
+                  <Card><CardHeader><CardTitle>Work item aging</CardTitle></CardHeader><CardContent><AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} /><ChartNote text={ci.aging} /></CardContent></Card>
+                  <Card><CardHeader><CardTitle>Cycle time histogram</CardTitle></CardHeader><CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /><ChartNote text={ci.histogram} /></CardContent></Card>
                 </section>
               </>
             )}
