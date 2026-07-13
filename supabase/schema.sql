@@ -51,6 +51,7 @@ create table sprints (
   start_date        date not null,
   end_date          date not null,
   committed_points  numeric not null default 0,
+  completed_points  numeric not null default 0,  -- do Velocity Chart do Jira (marvin)
   state             text not null check (state in ('active','closed','future')),
   created_at        timestamptz not null default now()
 );

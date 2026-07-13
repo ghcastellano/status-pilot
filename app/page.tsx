@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { RefreshCw, Sparkles, ChevronDown, Plug } from "lucide-react";
 import { useTeam } from "@/components/team-context";
+import { useT } from "@/components/lang-context";
 import { KpiCard } from "@/components/kpi-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ const PERIODS = [
 ];
 
 export default function DashboardPage() {
+  const t = useT();
   const { selectedTeam, teams, loading: teamsLoading } = useTeam();
   const [m, setM] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
@@ -242,17 +244,17 @@ export default function DashboardPage() {
 
       {/* 4 KPIs principais — cada um com a interpretação da IA */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard accent label="Cycle time" value={f.deliveryCycleTime.median} unit="d" sub={`p85 ${f.deliveryCycleTime.p85}d`} insight={insights?.cycleTime} />
+        <KpiCard accent label={t("Cycle time", "Cycle time")} value={f.deliveryCycleTime.median} unit="d" sub={t(`méd ${f.deliveryCycleTime.mean}d · med ${f.deliveryCycleTime.median}d · p85 ${f.deliveryCycleTime.p85}d`, `mean ${f.deliveryCycleTime.mean}d · median ${f.deliveryCycleTime.median}d · p85 ${f.deliveryCycleTime.p85}d`)} insight={insights?.cycleTime} />
         {isScrum ? (
-          <KpiCard label="Velocity" value={m.scrum?.avgVelocity ?? 0} unit="pts" sub={`σ ${m.scrum?.velocityStdev ?? 0}`} insight={insights?.secondary} />
+          <KpiCard label={t("Velocity", "Velocity")} value={m.scrum?.avgVelocity ?? 0} unit="pts" sub={`σ ${m.scrum?.velocityStdev ?? 0}`} insight={insights?.secondary} />
         ) : (
-          <KpiCard label="Throughput" value={f.throughput.perWeekAvg} unit="/sem" sub="itens concluídos" insight={insights?.secondary} />
+          <KpiCard label={t("Throughput", "Throughput")} value={f.throughput.perWeekAvg} unit="/sem" sub={t("itens concluídos", "items done")} insight={insights?.secondary} />
         )}
-        <KpiCard label="Flow efficiency" value={Math.round(f.flowEfficiency * 100)} unit="%" sub="ativo ÷ total" insight={insights?.flowEfficiency} />
+        <KpiCard label={t("Eficiência de fluxo", "Flow efficiency")} value={Math.round(f.flowEfficiency * 100)} unit="%" sub={t("ativo ÷ total", "active ÷ total")} insight={insights?.flowEfficiency} />
         {isScrum ? (
-          <KpiCard label="Previsibilidade" value={Math.round((m.scrum?.sayDoRatioAvg ?? 0) * 100)} unit="%" sub="say-do ratio" insight={insights?.predictability} />
+          <KpiCard label={t("Taxa de Acerto do Sprint", "Sprint Hit Rate")} value={Math.round((m.scrum?.sayDoRatioAvg ?? 0) * 100)} unit="%" sub={t("entregue ÷ combinado", "delivered ÷ committed")} insight={insights?.predictability} />
         ) : (
-          <KpiCard label="Previsibilidade" value={f.deliveryCycleTime.p85} unit="d" sub={`SLE: 85% ≤ ${f.deliveryCycleTime.p85}d`} insight={insights?.predictability} />
+          <KpiCard label={t("Previsibilidade", "Predictability")} value={f.deliveryCycleTime.p85} unit="d" sub={`SLE: 85% ≤ ${f.deliveryCycleTime.p85}d`} insight={insights?.predictability} />
         )}
       </div>
 

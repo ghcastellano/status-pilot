@@ -217,7 +217,7 @@ function sprintsFromIssues(
 ): SprintRow[] {
   if (!sprintField) return [];
   const today = new Date().toISOString().slice(0, 10);
-  const meta = new Map<string, Omit<SprintRow, "committed_points">>();
+  const meta = new Map<string, Omit<SprintRow, "committed_points" | "completed_points">>();
   for (const i of issues) {
     const arr = i.fields[sprintField];
     if (!Array.isArray(arr)) continue;
@@ -233,7 +233,42 @@ function sprintsFromIssues(
   }
   const spBy = new Map<string, number>();
   for (const r of issueRows) if (r.sprint_id) spBy.set(r.sprint_id, (spBy.get(r.sprint_id) ?? 0) + (r.story_points ?? 0));
-  return Array.from(meta.values()).map((s) => ({ ...s, committed_points: Math.round(spBy.get(s.id) ?? 0) }));
+  // committed_points = soma local de SP (fallback); completed_points fica 0 até o
+  // Velocity Chart do Jira sobrescrever (fonte exata do marvin, ver memória).
+  return Array.from(meta.values()).map((s) => ({
+    ...s,
+    committed_points: Math.round(spBy.get(s.id) ?? 0),
+    completed_points: 0,
+  }));
+}
+
+/**
+ * committed/completed points por sprint a partir do **Velocity Chart** do Jira
+ * (fonte exata e validada do marvin): `estimated.value`=committed,
+ * `completed.value`=completed. Uma chamada por board. Chave = sprintId cru.
+ * Endpoint greenhopper — funciona via Basic auth (não via OAuth 3LO na Indeed).
+ */
+async function fetchVelocityPoints(
+  jira: JiraProvider,
+  boardId: string
+): Promise<Map<string, { committed: number; completed: number }>> {
+  const map = new Map<string, { committed: number; completed: number }>();
+  try {
+    const data = await jira.raw<{ velocityStatEntries?: Record<string, { estimated?: { value?: number }; completed?: { value?: number } }> }>(
+      "GET",
+      `/rest/greenhopper/1.0/rapid/charts/velocity?rapidViewId=${boardId}`
+    );
+    for (const [sid, e] of Object.entries(data?.velocityStatEntries ?? {})) {
+      const committed = e?.estimated?.value;
+      const completed = e?.completed?.value;
+      if (typeof committed === "number" && committed > 0) {
+        map.set(String(sid), { committed, completed: typeof completed === "number" ? completed : 0 });
+      }
+    }
+  } catch {
+    /* board sem velocity (ou sem permissão) — segue com o fallback local de SP */
+  }
+  return map;
 }
 
 /**
@@ -297,6 +332,21 @@ export async function ingestBoard(jira: JiraProvider, team: TeamRow): Promise<nu
   // Sprints do campo Sprint. Tipo detectado: scrum se há sprints, senão kanban.
   const sprintRows = sprintsFromIssues(issues, issueRows, sprintField, team.id);
   const detectedType: TeamRow["board_type"] = sprintRows.length > 0 ? "scrum" : "kanban";
+
+  // committed/completed REAIS do Velocity Chart (marvin) — sobrescreve a soma local.
+  if (numericBoard && sprintRows.length) {
+    const vel = await fetchVelocityPoints(jira, team.jira_board_id!);
+    if (vel.size) {
+      for (const s of sprintRows) {
+        const raw = s.id.split("::")[1] ?? s.id;
+        const v = vel.get(raw);
+        if (v) {
+          s.committed_points = Math.round(v.committed);
+          s.completed_points = Math.round(v.completed);
+        }
+      }
+    }
+  }
 
   // FK: issue.sprint_id precisa existir em sprints (ou null)
   const sprintIds = new Set(sprintRows.map((s) => s.id));

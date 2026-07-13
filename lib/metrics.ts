@@ -30,6 +30,7 @@ export interface SprintRow {
   start_date: string;
   end_date: string;
   committed_points: number;
+  completed_points: number; // do Velocity Chart do Jira (marvin); 0 = usar fallback local
   state: "active" | "closed" | "future";
 }
 
@@ -85,7 +86,7 @@ export function referenceNow(issues: IssueRow[]): number {
   return max || Date.now();
 }
 
-export interface CtStat { median: number; p85: number; p95: number; count: number }
+export interface CtStat { mean: number; median: number; p85: number; p95: number; count: number }
 
 /** estatística de um intervalo entre dois carimbos (em dias). */
 function intervalStats(issues: IssueRow[], from: keyof IssueRow, to: keyof IssueRow): CtStat {
@@ -97,7 +98,9 @@ function intervalStats(issues: IssueRow[], from: keyof IssueRow, to: keyof Issue
     })
     .filter((x): x is number => x != null && x >= 0)
     .sort((a, b) => a - b);
+  const mean = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
   return {
+    mean: round1(mean), // média por item (como o marvin agrega cycle time)
     median: round1(percentile(vals, 0.5)),
     p85: round1(percentile(vals, 0.85)),
     p95: round1(percentile(vals, 0.95)),
@@ -274,10 +277,14 @@ function completedWithin(sprint: SprintRow, issues: IssueRow[]): number {
 export function computeScrum(sprints: SprintRow[], issues: IssueRow[], now: number): ScrumMetrics {
   const ordered = [...sprints].sort((a, b) => (a.start_date < b.start_date ? -1 : 1));
   const closed = ordered.filter((s) => s.state === "closed");
+  // "completed" do sprint: pontos REAIS do Velocity Chart (marvin) quando temos
+  // (>0); senão fallback = pontos concluídos dentro do sprint calculados local.
+  const completedPts = (s: SprintRow) =>
+    s.completed_points > 0 ? s.completed_points : completedWithin(s, issues);
   const velocity = ordered.map((s) => ({
-    sprint: s.name, committed: s.committed_points, completed: completedWithin(s, issues),
+    sprint: s.name, committed: s.committed_points, completed: completedPts(s),
   }));
-  const cv = closed.map((s) => completedWithin(s, issues));
+  const cv = closed.map((s) => completedPts(s));
   const avgVelocity = cv.length ? cv.reduce((a, b) => a + b, 0) / cv.length : 0;
   const variance = cv.length ? cv.reduce((a, v) => a + (v - avgVelocity) ** 2, 0) / cv.length : 0;
   // Sprint Predictability — CV das últimas ~6 closed sprints, do valor CRU (sem round1),
@@ -286,8 +293,9 @@ export function computeScrum(sprints: SprintRow[], issues: IssueRow[], now: numb
   const rcAvg = recentClosedPts.length ? recentClosedPts.reduce((a, b) => a + b, 0) / recentClosedPts.length : 0;
   const rcVar = recentClosedPts.length ? recentClosedPts.reduce((a, v) => a + (v - rcAvg) ** 2, 0) / recentClosedPts.length : 0;
   const velocityCV = recentClosedPts.length >= 3 && rcAvg > 0 ? Math.sqrt(rcVar) / rcAvg : null;
-  // exclui sprints com committed 0 (divisão inválida — Say-Do agora dirige o tier)
-  const sd = closed.filter((s) => s.committed_points > 0).map((s) => completedWithin(s, issues) / s.committed_points);
+  // Say-Do = completed ÷ committed por sprint (committed>0), média da janela. Igual
+  // ao "Sprint Hit Rate" do marvin quando os pontos vêm do Velocity Chart.
+  const sd = closed.filter((s) => s.committed_points > 0).map((s) => completedPts(s) / s.committed_points);
   const sayDoRatioAvg = sd.length ? Math.round((sd.reduce((a, b) => a + b, 0) / sd.length) * 100) / 100 : 0;
 
   const active = ordered.find((s) => s.state === "active") ?? null;

@@ -14,6 +14,8 @@ import { ArrowRight } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/components/lang-context";
+import { metricLabel } from "@/lib/i18n";
 import { CycleScatter, VelocityBar, ThroughputBar } from "@/components/charts";
 import { CFDChart, AgingScatter, CycleHistogram } from "@/components/charts-advanced";
 import { MaturityHistoryChart, type MaturityWeek } from "@/components/charts-maturity";
@@ -226,11 +228,12 @@ function MaturityLevelPanel({ team, mat, m, history }: { team: DashboardMaturity
 }
 
 function MetricKpi({ mt }: { mt: MetricEval }) {
+  const { lang } = useLang();
   const chip = mt.tier ? TIER_META[mt.tier] : null;
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="flex items-center justify-between gap-1">
-        <span className="truncate text-xs text-muted-foreground">{mt.label}</span>
+        <span className="truncate text-xs text-muted-foreground">{metricLabel(mt.key, lang, mt.label)}</span>
         {chip ? (
           <Badge variant={chip.token} className="shrink-0 text-[9px]">
             {chip.name}
@@ -381,11 +384,12 @@ function PillarSection({ pillar, team, mat, m }: { pillar: Pillar; team: Dashboa
 }
 
 function PillarMetric({ mt, isWeak }: { mt: MetricEval; isWeak: boolean }) {
+  const { lang } = useLang();
   const chip = mt.tier ? TIER_META[mt.tier] : null;
   return (
     <div className={cn("flex items-center justify-between gap-3 rounded-lg border border-border p-3", isWeak && "border-l-4 border-l-amber-500 bg-amber-500/[0.03]")}>
       <div className="min-w-0">
-        <p className="text-sm font-medium">{mt.label}</p>
+        <p className="text-sm font-medium">{metricLabel(mt.key, lang, mt.label)}</p>
         <p className="text-[11px] text-muted-foreground">
           {mt.tier == null ? "sem dados suficientes" : mt.nextTarget ? `meta: ${mt.nextTarget}` : "no topo ✓"}
           {isWeak && <span className="ml-1.5 font-medium text-amber-600">· elo mais fraco</span>}

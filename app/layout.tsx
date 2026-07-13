@@ -3,9 +3,11 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TeamProvider } from "@/components/team-context";
+import { LangProvider } from "@/components/lang-context";
 import { Sidebar } from "@/components/sidebar";
 import { TeamSelector } from "@/components/team-selector";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LangToggle } from "@/components/lang-toggle";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -32,18 +34,23 @@ export default function RootLayout({
           defaultTheme="light"
           enableSystem={false}
         >
-          <TeamProvider>
-            <div className="flex min-h-screen">
-              <Sidebar />
-              <div className="flex flex-1 flex-col">
-                <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b border-border bg-background/80 px-4 backdrop-blur md:px-8">
-                  <TeamSelector />
-                  <ThemeToggle />
-                </header>
-                <main className="flex-1 p-4 md:p-8">{children}</main>
+          <LangProvider>
+            <TeamProvider>
+              <div className="flex min-h-screen">
+                <Sidebar />
+                <div className="flex flex-1 flex-col">
+                  <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b border-border bg-background/80 px-4 backdrop-blur md:px-8">
+                    <TeamSelector />
+                    <div className="flex items-center gap-2">
+                      <LangToggle />
+                      <ThemeToggle />
+                    </div>
+                  </header>
+                  <main className="flex-1 p-4 md:p-8">{children}</main>
+                </div>
               </div>
-            </div>
-          </TeamProvider>
+            </TeamProvider>
+          </LangProvider>
         </ThemeProvider>
       </body>
     </html>
