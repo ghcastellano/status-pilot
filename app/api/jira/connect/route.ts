@@ -9,7 +9,10 @@ import { randomUUID } from "node:crypto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SCOPE = "read:jira-work read:jira-user offline_access";
+// read:jira-work/user cobrem /rest/api/3 (search, fields, status). Os endpoints
+// Agile (/rest/agile/1.0 board+sprint) exigem os scopes granulares de Jira Software.
+const SCOPE =
+  "read:jira-work read:jira-user read:board-scope:jira-software read:sprint:jira-software offline_access";
 
 export async function GET() {
   const clientId = process.env.JIRA_OAUTH_CLIENT_ID;
