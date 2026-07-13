@@ -157,9 +157,15 @@ export default function DashboardPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{m.team.name}</h1>
-            <Badge variant="secondary" title="A estrutura (board, sprints, épicos) é real no Jira; a linha do tempo é sintética para demonstração.">
-              histórico sintético · demo
-            </Badge>
+            {m.team.jira_board_id ? (
+              <Badge variant="secondary" title="Dados reais do Jira (issues, sprints e changelog), salvos no banco.">
+                Jira · dados reais
+              </Badge>
+            ) : (
+              <Badge variant="secondary" title="Time de demonstração — linha do tempo sintética.">
+                demo
+              </Badge>
+            )}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{m.team.description}</p>
         </div>

@@ -27,7 +27,12 @@ export interface SyncResult {
   total: number;
 }
 
-export async function syncIssuesFromJira(): Promise<SyncResult> {
+/**
+ * Sincroniza os times ativos a partir do Jira. `onlyTeamId` restringe a UM time
+ * (auto-sync em background ao selecionar um board no /config) — bem mais barato
+ * que re-sincronizar tudo a cada seleção.
+ */
+export async function syncIssuesFromJira(onlyTeamId?: string): Promise<SyncResult> {
   // Conexão Basic do /config (por empresa), com fallback p/ Basic via env.
   const jira = jiraProviderFromEnv();
   const sb = getSupabaseAdmin();
@@ -42,11 +47,13 @@ export async function syncIssuesFromJira(): Promise<SyncResult> {
   }
   const dateFieldIds = Object.values(fieldId);
 
-  // times ATIVOS (config já no banco)
-  const { data: teams, error } = await sb
+  // times ATIVOS (config já no banco) — ou só UM, no auto-sync por seleção.
+  let query = sb
     .from("teams")
     .select("id, name, board_type, description, jira_project_key, jira_board_id, jira_board_name, active")
     .eq("active", true);
+  if (onlyTeamId) query = query.eq("id", onlyTeamId);
+  const { data: teams, error } = await query;
   if (error) throw new Error(error.message);
 
   const byTeam: { team: string; count: number }[] = [];

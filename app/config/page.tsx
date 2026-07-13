@@ -9,7 +9,7 @@
  */
 import * as React from "react";
 import {
-  RefreshCw,
+  Plus,
   CheckCircle2,
   Search,
   Plug,
@@ -106,8 +106,8 @@ export default function ConfigPage() {
   const [teams, setTeams] = React.useState<TeamRow[]>([]);
   const [q, setQ] = React.useState("");
   const [pending, setPending] = React.useState<Record<string, boolean>>({});
-  const [syncing, setSyncing] = React.useState(false);
-  const [syncMsg, setSyncMsg] = React.useState<string | null>(null);
+  const [syncingTeams, setSyncingTeams] = React.useState<Record<string, boolean>>({});
+  const [showPicker, setShowPicker] = React.useState(false);
 
   // Formulário Basic auth
   const [jiraUrl, setJiraUrl] = React.useState("");
@@ -181,14 +181,15 @@ export default function ConfigPage() {
     loadTeams();
   }, [loadStatus, loadTeams]);
 
-  // Debounce (~350ms) da busca. Só dispara quando o Jira está conectado.
+  // Busca de boards SÓ quando o seletor está aberto — a lista pode ter milhares
+  // de boards; não faz sentido carregá-la toda vez que a tela abre. Debounce 350ms.
   React.useEffect(() => {
-    if (!status?.connected) return;
+    if (!status?.connected || !showPicker) return;
     const t = setTimeout(() => {
       void searchBoards(q.trim());
     }, 350);
     return () => clearTimeout(t);
-  }, [q, status?.connected, searchBoards]);
+  }, [q, status?.connected, showPicker, searchBoards]);
 
   // Set dos board ids ativos (times ativos com jira_board_id)
   const activeBoardIds = React.useMemo(() => {
@@ -302,6 +303,8 @@ export default function ConfigPage() {
       }
       if (!res.ok) throw new Error("falha");
       await loadTeams();
+      // Ao LIGAR um board, já puxa os dados desse time da API em background.
+      if (next) void autoSync(`board-${key}`);
     } catch {
       // revert
       await loadTeams();
@@ -314,20 +317,25 @@ export default function ConfigPage() {
     }
   }
 
-  async function doSync() {
-    setSyncing(true);
-    setSyncMsg(null);
+  // Auto-sync em background do time recém-selecionado (não bloqueia a UI). O
+  // dado fica salvo no Supabase — na próxima abertura já carrega do banco.
+  async function autoSync(teamId: string) {
+    setSyncingTeams((s) => ({ ...s, [teamId]: true }));
     try {
-      const res = await fetch("/api/sync", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Falha no sync");
-      setSyncMsg(`${data.total} itens sincronizados do Jira`);
+      await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId }),
+      });
       await loadTeams();
-    } catch (e) {
-      setSyncMsg((e as Error).message);
+    } catch {
+      /* silencioso — usuário pode religar o board p/ re-tentar */
     } finally {
-      setSyncing(false);
-      setTimeout(() => setSyncMsg(null), 5000);
+      setSyncingTeams((s) => {
+        const c = { ...s };
+        delete c[teamId];
+        return c;
+      });
     }
   }
 
@@ -527,6 +535,11 @@ export default function ConfigPage() {
                             {t.jira_board_id}
                           </p>
                         </div>
+                        {syncingTeams[t.id] && (
+                          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" /> sincronizando…
+                          </span>
+                        )}
                         <TypeBadge type={t.board_type} />
                         <button
                           type="button"
@@ -552,27 +565,49 @@ export default function ConfigPage() {
                 )}
                 {configuredTeams.length > 0 && (
                   <p className="text-[11px] text-muted-foreground">
-                    Clique em “Sincronizar agora” abaixo para puxar os dados.
+                    Os dados sincronizam sozinhos ao selecionar e ficam salvos — na próxima
+                    vez já carregam do banco.
                   </p>
                 )}
               </div>
 
-              {/* Busca de boards */}
-              <div className="space-y-3">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    placeholder="Buscar board por nome…"
-                    className="pl-9 pr-9"
-                  />
-                  {boardsLoading && (
-                    <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                  )}
-                </div>
+              {/* Seletor de boards — SOB DEMANDA (não carrega a lista à toa) */}
+              {!showPicker ? (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowPicker(true)}
+                >
+                  <Plus className="h-4 w-4" /> Selecionar mais times
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Selecionar boards
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowPicker(false)}
+                      className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={q}
+                      onChange={(e) => setQ(e.target.value)}
+                      placeholder="Buscar board por nome…"
+                      className="pl-9 pr-9"
+                    />
+                    {boardsLoading && (
+                      <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
 
-                {boards == null ? (
+                  {boards == null ? (
                   <div className="space-y-2">
                     {Array.from({ length: 4 }).map((_, i) => (
                       <div key={i} className="h-12 animate-pulse rounded-lg bg-muted" />
@@ -627,32 +662,12 @@ export default function ConfigPage() {
                       })}
                     </ul>
                   </>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </CardContent>
-      </Card>
-
-      {/* Sync */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Sincronizar dados</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            Puxa issues, sprints e épicos dos times ativos e detecta o tipo de cada um.
-          </p>
-          <Button variant="outline" onClick={doSync} disabled={syncing}>
-            <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
-            {syncing ? "Sincronizando…" : "Sincronizar agora"}
-          </Button>
-        </CardContent>
-        {syncMsg && (
-          <div className="px-6 pb-5 -mt-2">
-            <p className="text-xs text-primary">{syncMsg}</p>
-          </div>
-        )}
       </Card>
     </div>
   );

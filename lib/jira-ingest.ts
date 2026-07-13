@@ -43,14 +43,20 @@ const incl = (s: string, arr: string[]) => arr.some((x) => s.toLowerCase().inclu
 const statusFromCategory = (cat?: string): IssueStatus =>
   cat === "done" ? "Done" : cat === "indeterminate" ? "In Progress" : "To Do";
 
-/** Story Points field id: "Story point estimate" (team-managed) → "Story Points" → default Indeed. */
-async function detectStoryPointsField(jira: JiraProvider): Promise<string> {
+/**
+ * Candidatos a campo Story Points, EM ORDEM de preferência. Projetos diferentes
+ * usam campos diferentes ("Story Points" company-managed = customfield_10061 na
+ * Indeed; "Story point estimate" team-managed). Retornamos TODOS os candidatos e
+ * o mapIssue usa o 1º que tiver valor — robusto sem depender de qual projeto é.
+ */
+async function detectStoryPointsFields(jira: JiraProvider): Promise<string[]> {
+  const fallback = ["customfield_10061", "customfield_10016"];
   try {
     const fields = await jira.fields();
-    const find = (re: RegExp) => fields.find((f) => re.test(f.name))?.id;
-    return find(/story point estimate/i) || find(/^story points?$/i) || find(/story point/i) || "customfield_10061";
+    const ids = fields.filter((f) => /story point/i.test(f.name)).map((f) => f.id);
+    return Array.from(new Set([...ids, ...fallback]));
   } catch {
-    return "customfield_10061";
+    return fallback;
   }
 }
 
@@ -145,7 +151,7 @@ function deriveTimeline(
 function mapIssue(
   issue: JiraIssue,
   teamId: string,
-  spField: string,
+  spFields: string[],
   sprintField: string | null,
   catOf: Map<string, string>
 ): IssueRow {
@@ -153,19 +159,30 @@ function mapIssue(
   const statusName: string = f.status?.name ?? "To Do";
   const cat: string | undefined = f.status?.statusCategory?.key;
   const { stages, startedAt, doneAt } = deriveTimeline(issue, statusName, cat, catOf);
-  const spRaw = spField ? f[spField] : null;
-  const story_points = typeof spRaw === "number" ? spRaw : spRaw != null && !Number.isNaN(Number(spRaw)) ? Number(spRaw) : null;
+  // 1º campo candidato de SP que tiver valor numérico (projetos usam campos distintos).
+  let story_points: number | null = null;
+  for (const id of spFields) {
+    const v = f[id];
+    const n = typeof v === "number" ? v : v != null && !Number.isNaN(Number(v)) ? Number(v) : null;
+    if (n != null) {
+      story_points = n;
+      break;
+    }
+  }
 
-  // sprint atual/último a partir do campo Sprint (fallback; membership pode ser sobrescrita depois)
+  // sprint atual/último a partir do campo Sprint (fallback; membership pode ser sobrescrita depois).
+  // id do sprint ESCOPADO por time (mesmo sprint pode existir em >1 board/time sem colidir na pk).
   let sprint_id: string | null = null;
   if (sprintField && Array.isArray(f[sprintField]) && f[sprintField].length) {
     const arr = f[sprintField];
     const last = arr[arr.length - 1];
-    sprint_id = last?.id != null ? String(last.id) : null;
+    sprint_id = last?.id != null ? `${teamId}::${last.id}` : null;
   }
 
   return {
-    id: issue.key,
+    // id ESCOPADO por time: a MESMA issue do Jira pode pertencer a 2 boards
+    // (times) diferentes — ex.: boards do mesmo projeto — sem violar a pk.
+    id: `${teamId}::${issue.key}`,
     team_id: teamId,
     sprint_id,
     epic_key: f.parent?.key ?? null,
@@ -206,7 +223,7 @@ function sprintsFromIssues(
     if (!Array.isArray(arr)) continue;
     for (const s of arr) {
       if (!s || s.id == null) continue;
-      const id = String(s.id);
+      const id = `${teamId}::${s.id}`; // escopado por time (igual ao issue.sprint_id)
       if (meta.has(id)) continue;
       const start = ((s.startDate ?? s.activatedDate ?? "") as string).slice(0, 10) || today;
       const end = ((s.completeDate ?? s.endDate ?? s.startDate ?? "") as string).slice(0, 10) || start;
@@ -220,30 +237,62 @@ function sprintsFromIssues(
 }
 
 /**
- * Ingesta um PROJETO real do Jira (só /rest/api/3 — sem Agile API). Deriva
- * cycle time/stages do changelog e sprints do campo Sprint das issues.
- * board_type é DETECTADO (scrum se há sprints, senão kanban) e corrigido no time.
+ * JQL REAL do board (Agile) → cada board pega SUAS issues, não o projeto
+ * inteiro. Board = filtro salvo; buscamos o filtro e sua JQL. Sem a Agile API
+ * (ou board sem filtro) retorna null e o caller cai p/ `project = KEY`.
+ */
+async function boardJql(jira: JiraProvider, boardId: string): Promise<string | null> {
+  try {
+    const cfg = await jira.raw<{ filter?: { id?: string | number } }>(
+      "GET",
+      `/rest/agile/1.0/board/${boardId}/configuration`
+    );
+    const fid = cfg?.filter?.id;
+    if (fid == null) return null;
+    const filter = await jira.raw<{ jql?: string }>("GET", `/rest/api/3/filter/${fid}`);
+    const jql = filter?.jql?.trim();
+    if (!jql) return null;
+    // remove ORDER BY existente — anexamos o nosso (janela + updated DESC).
+    return jql.replace(/\s+order\s+by\s+[\s\S]*$/i, "").trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ingesta um BOARD real do Jira. Escopo por JQL DO BOARD (Agile) quando
+ * disponível — senão `project = KEY`. Deriva cycle time/stages do changelog e
+ * sprints do campo Sprint. board_type DETECTADO (scrum se há sprints) e corrigido.
  * Retorna nº de issues.
  */
 export async function ingestBoard(jira: JiraProvider, team: TeamRow): Promise<number> {
   const projectKey = team.jira_project_key;
-  if (!projectKey) throw new Error(`Time ${team.id} sem jira_project_key.`);
   const sb = getSupabaseAdmin();
 
-  const [spField, sprintField, catOf] = await Promise.all([
-    detectStoryPointsField(jira),
+  const numericBoard = /^\d+$/.test(team.jira_board_id ?? "");
+  const [spFields, sprintField, catOf, boardScope] = await Promise.all([
+    detectStoryPointsFields(jira),
     detectSprintField(jira),
     fetchStatusCategories(jira),
+    numericBoard ? boardJql(jira, team.jira_board_id!) : Promise.resolve(null),
   ]);
+
+  // Escopo: JQL do board (SUAS issues) → fallback projeto inteiro.
+  const scope = boardScope ?? (projectKey ? `project = "${projectKey}"` : null);
+  if (!scope) throw new Error(`Time ${team.id} sem JQL de board nem jira_project_key.`);
 
   // Janela: não-Done OU resolvidas nas últimas ~13 semanas; cap 500 issues mais
   // recentes (projetos grandes têm milhares — limite de 60s serverless + p85).
-  const jql = `project = "${projectKey}" AND (statusCategory != Done OR resolved >= -91d) ORDER BY updated DESC`;
-  const fields = ["summary", "issuetype", "status", "created", "resolutiondate", "parent", spField, sprintField].filter(
+  const jql = `(${scope}) AND (statusCategory != Done OR resolved >= -91d) ORDER BY updated DESC`;
+  const fields = ["summary", "issuetype", "status", "created", "resolutiondate", "parent", ...spFields, sprintField].filter(
     (x): x is string => !!x
   );
   const issues = await jira.searchJql(jql, fields, 100, ["changelog"], 500);
-  const issueRows = issues.map((i) => mapIssue(i, team.id, spField, sprintField, catOf));
+  // dedupe por id (issue pode reaparecer na paginação da janela)
+  const seen = new Set<string>();
+  const issueRows = issues
+    .map((i) => mapIssue(i, team.id, spFields, sprintField, catOf))
+    .filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
 
   // Sprints do campo Sprint. Tipo detectado: scrum se há sprints, senão kanban.
   const sprintRows = sprintsFromIssues(issues, issueRows, sprintField, team.id);
@@ -261,7 +310,7 @@ export async function ingestBoard(jira: JiraProvider, team: TeamRow): Promise<nu
     if (error) throw new Error(`sprints ${team.id}: ${error.message}`);
   }
   for (let k = 0; k < issueRows.length; k += 200) {
-    const { error } = await sb.from("issues").insert(issueRows.slice(k, k + 200));
+    const { error } = await sb.from("issues").upsert(issueRows.slice(k, k + 200), { onConflict: "id" });
     if (error) throw new Error(`issues ${team.id}: ${error.message}`);
   }
   // Board da Agile (id numérico) tem tipo REAL — respeita. Projeto v3 (id = key) → detecta.
