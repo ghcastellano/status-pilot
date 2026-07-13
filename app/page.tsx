@@ -157,14 +157,13 @@ export default function DashboardPage() {
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
           <Plug className="h-6 w-6" />
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight">Conecte seu Jira para começar</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("Conecte seu Jira para começar", "Connect your Jira to get started")}</h1>
         <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-          Nenhum time configurado ainda. Conecte o Jira da sua empresa e escolha os projetos que quer
-          analisar — a maturidade sai de dados reais.
+          {t("Nenhum time configurado ainda. Conecte o Jira da sua empresa e escolha os projetos que quer analisar — a maturidade sai de dados reais.", "No teams configured yet. Connect your company's Jira and pick the projects to analyze — maturity comes from real data.")}
         </p>
         <Link href="/config">
           <Button className="mt-6">
-            <Plug className="h-4 w-4" /> Ir para Configurar
+            <Plug className="h-4 w-4" /> {t("Ir para Configurar", "Go to Setup")}
           </Button>
         </Link>
       </div>
@@ -244,11 +243,11 @@ export default function DashboardPage() {
           )}
           <Button variant="outline" onClick={doSync} disabled={syncing}>
             <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-            {syncing ? "Sincronizando…" : "Sincronizar"}
+            {syncing ? t("Sincronizando…", "Syncing…") : t("Sincronizar", "Sync")}
           </Button>
           <Link href="/config">
-            <Button variant="ghost" className="text-muted-foreground" title="Configurar conexão do Jira e times">
-              Configurar
+            <Button variant="ghost" className="text-muted-foreground" title={t("Configurar conexão do Jira e times", "Configure Jira connection and teams")}>
+              {t("Configurar", "Setup")}
             </Button>
           </Link>
         </div>
@@ -283,7 +282,7 @@ export default function DashboardPage() {
         <>
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Sparkles className="h-3.5 w-3.5 text-primary" />
-        {insightLoading ? "IA interpretando cada métrica…" : "Leitura automática da IA em cada métrica"}
+        {insightLoading ? t("IA interpretando cada métrica…", "AI reading each metric…") : t("Leitura automática da IA em cada métrica", "Automatic AI reading of each metric")}
       </div>
 
       {/* 4 KPIs principais — cada um com a interpretação da IA */}
