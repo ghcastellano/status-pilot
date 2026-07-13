@@ -21,6 +21,13 @@ export function getSupabaseAdmin(): SupabaseClient {
 
   cached = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    // CRÍTICO: o supabase-js usa fetch() por baixo, e o Next.js 14 CACHEIA fetch
+    // por padrão (Data Cache) mesmo em rotas force-dynamic — o que fazia leituras
+    // voltarem STALE (ex.: conexão já deletada ainda aparecendo). no-store desliga.
+    global: {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+        fetch(input, { ...init, cache: "no-store" }),
+    },
   });
   return cached;
 }
