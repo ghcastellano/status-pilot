@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * /config — Configurar Jira + selecionar projetos como times.
- * Conecta via OAuth, busca PROJETOS do Jira (server-side, /rest/api/3) e liga/
- * desliga cada um como time (POST/DELETE /api/teams). O tipo scrum/kanban é
- * detectado na sincronização. Botão de sincronizar reaproveita /api/sync.
+ * /config — Configurar Jira + selecionar boards como times.
+ * Conecta via Basic auth (email + API token) ou OAuth 2.0 (3LO), busca BOARDS
+ * do Jira (server-side) e liga/desliga cada um como time (POST/DELETE
+ * /api/teams). Com Basic auth o tipo scrum/kanban é real; no fallback OAuth o
+ * tipo é "unknown" (detectado na sincronização).
  */
 import * as React from "react";
 import {
@@ -29,11 +30,13 @@ interface JiraStatus {
   account_name: string | null;
 }
 
-// Cada "board" agora é um PROJETO do Jira (id === projectKey).
+// Cada "board" é um board do Jira. Com Basic auth `id` é numérico e `type` é
+// o tipo real (scrum/kanban); no fallback OAuth `id` é a project key e `type`
+// é "unknown".
 interface Board {
-  id: string;
+  id: string | number;
   name: string;
-  type: string; // sempre "unknown" aqui — tipo real detectado na sync
+  type: string; // "scrum" | "kanban" | "unknown"
   projectKey: string | null;
   projectName: string | null;
 }
@@ -107,6 +110,14 @@ export default function ConfigPage() {
   const [syncing, setSyncing] = React.useState(false);
   const [syncMsg, setSyncMsg] = React.useState<string | null>(null);
 
+  // Formulário Basic auth
+  const [jiraUrl, setJiraUrl] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [token, setToken] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+  const [connectErr, setConnectErr] = React.useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = React.useState(false);
+
   // Banner de retorno do OAuth (?jira=connected|error)
   React.useEffect(() => {
     const j = new URLSearchParams(window.location.search).get("jira");
@@ -141,7 +152,7 @@ export default function ConfigPage() {
     }
   }, []);
 
-  // Busca server-side de projetos. Sem query → primeiros 50 (default da API).
+  // Busca server-side de boards. Sem query → primeiros 50 (default da API).
   const searchBoards = React.useCallback(async (query: string) => {
     setBoardsLoading(true);
     setBoardsErr(null);
@@ -152,7 +163,7 @@ export default function ConfigPage() {
       const r = await fetch(url, { cache: "no-store" });
       const d = await r.json();
       if (!r.ok) {
-        setBoardsErr(d.error ?? "Falha ao buscar projetos.");
+        setBoardsErr(d.error ?? "Falha ao buscar boards.");
         setBoards([]);
         setTotal(0);
         return;
@@ -182,23 +193,68 @@ export default function ConfigPage() {
     return () => clearTimeout(t);
   }, [q, status?.connected, searchBoards]);
 
-  // Set dos projectKeys ativos (times ativos com jira_board_id)
+  // Set dos board ids ativos (times ativos com jira_board_id)
   const activeBoardIds = React.useMemo(() => {
     const s = new Set<string>();
     for (const t of teams) if (t.active && t.jira_board_id) s.add(t.jira_board_id);
     return s;
   }, [teams]);
 
-  const isOn = (b: Board) => activeBoardIds.has(b.id);
+  const isOn = (b: Board) => activeBoardIds.has(String(b.id));
 
-  // Liga/desliga um projeto como time. Otimista + revert-via-reload.
+  // Conecta via Basic auth. On success recarrega status + boards + teams.
+  async function connectBasic(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setConnectErr(null);
+    try {
+      const res = await fetch("/api/jira/connect-basic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jiraUrl, email, token }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setConnectErr(data.error ?? "Falha ao conectar ao Jira.");
+        return;
+      }
+      setToken("");
+      await Promise.all([loadStatus(), loadTeams()]);
+      await searchBoards(q.trim());
+    } catch (err) {
+      setConnectErr((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // Desconecta (DELETE) e limpa as visões de boards/times.
+  async function disconnect() {
+    setDisconnecting(true);
+    try {
+      await fetch("/api/jira/connect-basic", { method: "DELETE" });
+    } catch {
+      /* segue para recarregar o status de qualquer forma */
+    } finally {
+      setBoards(null);
+      setTotal(0);
+      setBoardsErr(null);
+      setTeams([]);
+      await loadStatus();
+      setDisconnecting(false);
+    }
+  }
+
+  // Liga/desliga um board como time. Otimista + revert-via-reload.
   async function setTeamActive(
-    projectKey: string,
+    boardId: string,
     name: string,
+    projectKey: string | null,
     projectName: string | null,
+    boardType: "scrum" | "kanban" | undefined,
     next: boolean
   ) {
-    const key = projectKey;
+    const key = boardId;
     setPending((p) => ({ ...p, [key]: true }));
     // otimista
     setTeams((prev) => {
@@ -214,7 +270,7 @@ export default function ConfigPage() {
           {
             id: `board-${key}`,
             name,
-            board_type: "scrum",
+            board_type: boardType ?? "scrum",
             jira_board_id: key,
             active: true,
           },
@@ -230,10 +286,11 @@ export default function ConfigPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            boardId: projectKey,
+            boardId,
             name,
-            projectKey,
+            projectKey: projectKey ?? undefined,
             projectName: projectName ?? undefined,
+            boardType,
           }),
         });
       } else {
@@ -274,7 +331,7 @@ export default function ConfigPage() {
   const notConnected = status != null && !connected;
   const boardsBlocked = boardsErr != null;
 
-  // Times configurados: times ativos com um projeto Jira vinculado.
+  // Times configurados: times ativos com um board Jira vinculado.
   const configuredTeams = React.useMemo(
     () => teams.filter((t) => t.active && t.jira_board_id),
     [teams]
@@ -286,7 +343,7 @@ export default function ConfigPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Configurar Jira</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Conecte sua conta do Jira e escolha quais projetos viram times monitorados.
+          Conecte sua conta do Jira e escolha quais boards viram times monitorados.
         </p>
       </div>
 
@@ -310,41 +367,147 @@ export default function ConfigPage() {
           {status == null ? (
             <div className="h-6 w-48 animate-pulse rounded bg-muted" />
           ) : connected ? (
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium">
-                  Conectado: <span className="text-primary">{status.site_url}</span>
-                </p>
-                {status.account_name && (
-                  <p className="text-xs text-muted-foreground">
-                    Autorizado por {status.account_name}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    Conectado:{" "}
+                    <span className="text-primary">{status.site_url}</span>
                   </p>
-                )}
+                  {status.account_name && (
+                    <p className="text-xs text-muted-foreground">
+                      Autorizado por {status.account_name}
+                    </p>
+                  )}
+                </div>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={disconnect}
+                disabled={disconnecting}
+              >
+                {disconnecting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : null}
+                Desconectar
+              </Button>
             </div>
           ) : (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Nenhum Jira conectado. Autorize via OAuth 2.0 (3LO).
+            <div className="space-y-5">
+              <form onSubmit={connectBasic} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="jira-url"
+                    className="text-sm font-medium"
+                  >
+                    URL do Jira
+                  </label>
+                  <Input
+                    id="jira-url"
+                    value={jiraUrl}
+                    onChange={(e) => setJiraUrl(e.target.value)}
+                    placeholder="https://sua-empresa.atlassian.net"
+                    autoComplete="off"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="jira-email" className="text-sm font-medium">
+                    E-mail
+                  </label>
+                  <Input
+                    id="jira-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="voce@sua-empresa.com"
+                    autoComplete="username"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="jira-token" className="text-sm font-medium">
+                    API Token
+                  </label>
+                  <Input
+                    id="jira-token"
+                    type="password"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="••••••••••••••••"
+                    autoComplete="new-password"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    <a
+                      href="https://id.atlassian.com/manage-profile/security/api-tokens"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline underline-offset-2"
+                    >
+                      Criar um API token aqui
+                    </a>{" "}
+                    · salvo com segurança no servidor.
+                  </p>
+                </div>
+
+                {connectErr && (
+                  <p className="text-sm text-destructive">{connectErr}</p>
+                )}
+
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Conectando…
+                    </>
+                  ) : (
+                    <>
+                      <Plug className="h-4 w-4" /> Conectar ao Jira
+                    </>
+                  )}
+                </Button>
+              </form>
+
+              {/* Como obter o token */}
+              <div className="rounded-lg border border-border bg-muted/40 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Como obter seu API token
+                </p>
+                <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+                  <li>Acesse id.atlassian.com → Segurança.</li>
+                  <li>Clique em “Create and manage API tokens”.</li>
+                  <li>Clique em “Create API token”.</li>
+                  <li>Copie e cole acima.</li>
+                </ol>
+              </div>
+
+              {/* Nota de segurança */}
+              <p className="text-xs text-muted-foreground">
+                As credenciais ficam no servidor (Supabase), usadas só para ler o
+                seu Jira. Você pode desconectar quando quiser.
               </p>
-              <Button
+
+              {/* OAuth alternativo */}
+              <button
+                type="button"
                 onClick={() => {
                   window.location.href = "/api/jira/connect";
                 }}
+                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
               >
-                <Plug className="h-4 w-4" /> Conectar Jira
-              </Button>
+                ou conectar via OAuth 2.0 (3LO)
+              </button>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Projetos → times */}
+      {/* Boards → times */}
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div className="space-y-1.5">
-            <CardTitle>Projetos → times</CardTitle>
+            <CardTitle>Boards → times</CardTitle>
             <p className="text-xs text-muted-foreground">
               {configuredTeams.length}{" "}
               {configuredTeams.length === 1 ? "time configurado" : "times configurados"}.
@@ -358,17 +521,8 @@ export default function ConfigPage() {
                 <AlertCircle className="h-4 w-4" />
                 {boardsBlocked && !notConnected
                   ? boardsErr
-                  : "Conecte o Jira primeiro para buscar projetos."}
+                  : "Conecte o Jira primeiro para buscar boards."}
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  window.location.href = "/api/jira/connect";
-                }}
-              >
-                <Plug className="h-4 w-4" /> Conectar Jira
-              </Button>
             </div>
           ) : (
             <>
@@ -379,7 +533,7 @@ export default function ConfigPage() {
                 </p>
                 {configuredTeams.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                    Nenhum time configurado ainda — busque um projeto abaixo.
+                    Nenhum time configurado ainda — busque um board abaixo.
                   </p>
                 ) : (
                   <ul className="divide-y divide-border rounded-lg border border-border">
@@ -397,7 +551,14 @@ export default function ConfigPage() {
                           aria-label={`Remover ${t.name}`}
                           disabled={!!pending[t.jira_board_id ?? ""]}
                           onClick={() =>
-                            setTeamActive(t.jira_board_id!, t.name, null, false)
+                            setTeamActive(
+                              t.jira_board_id!,
+                              t.name,
+                              null,
+                              null,
+                              undefined,
+                              false
+                            )
                           }
                           className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive disabled:opacity-50"
                         >
@@ -409,20 +570,19 @@ export default function ConfigPage() {
                 )}
                 {configuredTeams.length > 0 && (
                   <p className="text-[11px] text-muted-foreground">
-                    Clique em “Sincronizar agora” abaixo para puxar os dados e detectar o
-                    tipo (scrum/kanban).
+                    Clique em “Sincronizar agora” abaixo para puxar os dados.
                   </p>
                 )}
               </div>
 
-              {/* Busca de projetos */}
+              {/* Busca de boards */}
               <div className="space-y-3">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
-                    placeholder="Buscar projeto por nome ou key…"
+                    placeholder="Buscar board por nome…"
                     className="pl-9 pr-9"
                   />
                   {boardsLoading && (
@@ -438,35 +598,47 @@ export default function ConfigPage() {
                   </div>
                 ) : boards.length === 0 ? (
                   <p className="py-6 text-center text-sm text-muted-foreground">
-                    Nenhum projeto encontrado.
+                    Nenhum board encontrado.
                   </p>
                 ) : (
                   <>
                     <p className="text-[11px] text-muted-foreground">
                       {q.trim()
-                        ? `${boards.length} de ${total} projetos · tipo detectado ao sincronizar`
-                        : `Digite para buscar entre os ${total} projetos · tipo detectado ao sincronizar`}
+                        ? `${boards.length} de ${total} boards`
+                        : `Digite para buscar entre os ${total} boards`}
                     </p>
                     <ul className="divide-y divide-border rounded-lg border border-border">
                       {boards.map((b) => {
                         const on = isOn(b);
+                        const typed =
+                          b.type === "scrum" || b.type === "kanban"
+                            ? (b.type as "scrum" | "kanban")
+                            : undefined;
                         return (
                           <li
-                            key={b.id}
+                            key={String(b.id)}
                             className="flex items-center gap-3 px-4 py-2.5"
                           >
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium">{b.name}</p>
                               <p className="text-[11px] text-muted-foreground">
-                                {b.projectKey ?? b.id}
+                                {b.projectKey ?? String(b.id)}
                               </p>
                             </div>
+                            {typed && <TypeBadge type={typed} />}
                             <Switch
                               on={on}
                               onChange={(v) =>
-                                setTeamActive(b.id, b.name, b.projectName, v)
+                                setTeamActive(
+                                  String(b.id),
+                                  b.name,
+                                  b.projectKey,
+                                  b.projectName,
+                                  typed,
+                                  v
+                                )
                               }
-                              disabled={!!pending[b.id]}
+                              disabled={!!pending[String(b.id)]}
                             />
                           </li>
                         );

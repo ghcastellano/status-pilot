@@ -88,6 +88,7 @@ export async function GET(req: NextRequest) {
 
     await saveJiraConnection({
       cloud_id: site.id,
+      auth_type: "oauth",
       site_url: site.url,
       access_token: tok.access_token,
       refresh_token: tok.refresh_token ?? null,
@@ -95,6 +96,8 @@ export async function GET(req: NextRequest) {
       scopes: tok.scope ?? null,
       account_id: accountId,
       account_name: accountName ?? site.name ?? null,
+      basic_email: null,
+      basic_token: null,
     });
 
     const ok = NextResponse.redirect(new URL("/config?jira=connected", origin));

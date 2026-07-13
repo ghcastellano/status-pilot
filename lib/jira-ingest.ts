@@ -35,6 +35,11 @@ const kindOf = (name: string, cat?: string): StageStamp["kind"] => {
   return "wait";
 };
 
+// Cycle time — nomes de status que marcam início/fim (lógica do marvin, fonte de verdade).
+const IN_PROGRESS_STATUSES = ["in progress", "development", "doing"];
+const DONE_STATUSES = ["closed", "done", "resolved", "complete", "completed"];
+const incl = (s: string, arr: string[]) => arr.some((x) => s.toLowerCase().includes(x));
+
 const statusFromCategory = (cat?: string): IssueStatus =>
   cat === "done" ? "Done" : cat === "indeterminate" ? "In Progress" : "To Do";
 
@@ -104,8 +109,36 @@ function deriveTimeline(
     }
   }
 
-  const startedAt = stages.find((s) => s.kind === "active")?.at ?? null;
-  const doneAt = stages.find((s) => s.kind === "done")?.at ?? null;
+  // START/END do cycle time — lógica do marvin: start = 1º "add ao Sprint"
+  // (campo Sprint) senão 1ª entrada em progress/development/doing; end = 1ª
+  // transição p/ done, em/após o start.
+  const hist = (issue.changelog?.histories ?? []).slice().sort((a, b) => (a.created < b.created ? -1 : 1));
+  let startedAt: string | null = null;
+  for (const h of hist) {
+    if (h.items.some((it) => it.field === "Sprint" && it.toString)) {
+      startedAt = h.created;
+      break;
+    }
+  }
+  if (!startedAt) {
+    for (const h of hist) {
+      if (h.items.some((it) => it.field === "status" && it.toString && incl(it.toString, IN_PROGRESS_STATUSES))) {
+        startedAt = h.created;
+        break;
+      }
+    }
+  }
+  let doneAt: string | null = null;
+  if (startedAt) {
+    const startMs = Date.parse(startedAt);
+    for (const h of hist) {
+      if (Date.parse(h.created) < startMs) continue;
+      if (h.items.some((it) => it.field === "status" && it.toString && incl(it.toString, DONE_STATUSES))) {
+        doneAt = h.created;
+        break;
+      }
+    }
+  }
   return { stages, startedAt, doneAt };
 }
 
@@ -231,7 +264,9 @@ export async function ingestBoard(jira: JiraProvider, team: TeamRow): Promise<nu
     const { error } = await sb.from("issues").insert(issueRows.slice(k, k + 200));
     if (error) throw new Error(`issues ${team.id}: ${error.message}`);
   }
-  if (detectedType !== team.board_type) {
+  // Board da Agile (id numérico) tem tipo REAL — respeita. Projeto v3 (id = key) → detecta.
+  const fromAgileBoard = /^\d+$/.test(team.jira_board_id ?? "");
+  if (!fromAgileBoard && detectedType !== team.board_type) {
     await sb.from("teams").update({ board_type: detectedType }).eq("id", team.id);
   }
   await sb.from("qa_cache").delete().eq("team_id", team.id);

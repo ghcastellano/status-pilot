@@ -190,11 +190,16 @@ create index coaching_field_history_team_idx on coaching_field_history(team_id, 
 -- conectado; tokens guardados no backend (service_role), nunca no frontend.
 create table jira_connections (
   id            text primary key default 'default',
-  cloud_id      text not null,
+  auth_type     text not null default 'oauth',  -- 'oauth' | 'basic'
   site_url      text not null,
-  access_token  text not null,
+  -- Basic auth (form do /config)
+  basic_email   text,
+  basic_token   text,
+  -- OAuth 2.0 (3LO)
+  cloud_id      text,
+  access_token  text,
   refresh_token text,
-  expires_at    timestamptz not null,
+  expires_at    timestamptz,
   scopes        text,
   account_id    text,
   account_name  text,
