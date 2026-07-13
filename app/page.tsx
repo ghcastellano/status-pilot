@@ -274,7 +274,7 @@ export default function DashboardPage() {
 
       {/* 1 gráfico principal + leitura da IA */}
       <Card>
-        <CardHeader><CardTitle>Cycle time — distribuição e tendência</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("Cycle time — distribuição e tendência", "Cycle time — distribution & trend")}</CardTitle></CardHeader>
         <CardContent>
           <CycleScatter data={f.scatter} p50={f.deliveryCycleTime.median} p85={f.deliveryCycleTime.p85} />
           <ChartNote text={ci.cycle} />
@@ -294,7 +294,7 @@ export default function DashboardPage() {
           className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronDown className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
-          Métricas avançadas ({isScrum ? "scrum" : "flow"}) {showAdvanced ? "" : "— mostrar"}
+          {t("Métricas avançadas", "Advanced metrics")} ({isScrum ? "scrum" : "flow"}) {showAdvanced ? "" : t("— mostrar", "— show")}
         </button>
 
         {showAdvanced && (
@@ -303,27 +303,27 @@ export default function DashboardPage() {
               /* ── SCRUM: velocity + burndown em primeiro plano ─── */
               <section className="grid gap-4 lg:grid-cols-2">
                 <Card>
-                  <CardHeader><CardTitle>Velocity por sprint</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>{t("Velocity por sprint", "Velocity by sprint")}</CardTitle></CardHeader>
                   <CardContent><VelocityBar data={m.scrum.velocity} /><ChartNote text={ci.velocity} /></CardContent>
                 </Card>
                 {m.scrum.currentSprint ? (
                   <Card>
-                    <CardHeader><CardTitle>Sprint burndown — {m.scrum.currentSprint.name}</CardTitle></CardHeader>
+                    <CardHeader><CardTitle>{t("Sprint burndown", "Sprint burndown")} — {m.scrum.currentSprint.name}</CardTitle></CardHeader>
                     <CardContent><BurndownLine data={m.scrum.burndown} /><ChartNote text={ci.burndown} /></CardContent>
                   </Card>
                 ) : (
                   <Card>
-                    <CardHeader><CardTitle>Cycle time histogram</CardTitle></CardHeader>
+                    <CardHeader><CardTitle>{t("Cycle time — histograma", "Cycle time histogram")}</CardTitle></CardHeader>
                     <CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /><ChartNote text={ci.histogram} /></CardContent>
                   </Card>
                 )}
                 <Card>
-                  <CardHeader><CardTitle>Work item aging</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>{t("Envelhecimento de itens (aging)", "Work item aging")}</CardTitle></CardHeader>
                   <CardContent><AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} /><ChartNote text={ci.aging} /></CardContent>
                 </Card>
                 {m.scrum.currentSprint && (
                   <Card>
-                    <CardHeader><CardTitle>Cycle time histogram</CardTitle></CardHeader>
+                    <CardHeader><CardTitle>{t("Cycle time — histograma", "Cycle time histogram")}</CardTitle></CardHeader>
                     <CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /><ChartNote text={ci.histogram} /></CardContent>
                   </Card>
                 )}
@@ -332,14 +332,14 @@ export default function DashboardPage() {
               /* ── KANBAN: CFD + WIP/throughput em primeiro plano ─ */
               <>
                 <Card>
-                  <CardHeader><CardTitle>Cumulative Flow Diagram (CFD)</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>{t("Diagrama de Fluxo Cumulativo (CFD)", "Cumulative Flow Diagram (CFD)")}</CardTitle></CardHeader>
                   <CardContent><CFDChart stages={adv.cfd.stages} points={adv.cfd.points} /><ChartNote text={ci.cfd} /></CardContent>
                 </Card>
                 <section className="grid gap-4 lg:grid-cols-2">
-                  <Card><CardHeader><CardTitle>Evolução (throughput · WIP · cycle time)</CardTitle></CardHeader><CardContent><TrendsChart data={adv.trends} /><ChartNote text={ci.trends} /></CardContent></Card>
-                  <Card><CardHeader><CardTitle>Throughput por semana</CardTitle></CardHeader><CardContent><ThroughputBar series={f.throughput.series} /><ChartNote text={ci.throughput} /></CardContent></Card>
-                  <Card><CardHeader><CardTitle>Work item aging</CardTitle></CardHeader><CardContent><AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} /><ChartNote text={ci.aging} /></CardContent></Card>
-                  <Card><CardHeader><CardTitle>Cycle time histogram</CardTitle></CardHeader><CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /><ChartNote text={ci.histogram} /></CardContent></Card>
+                  <Card><CardHeader><CardTitle>{t("Evolução (throughput · WIP · cycle time)", "Trends (throughput · WIP · cycle time)")}</CardTitle></CardHeader><CardContent><TrendsChart data={adv.trends} /><ChartNote text={ci.trends} /></CardContent></Card>
+                  <Card><CardHeader><CardTitle>{t("Throughput por semana", "Throughput per week")}</CardTitle></CardHeader><CardContent><ThroughputBar series={f.throughput.series} /><ChartNote text={ci.throughput} /></CardContent></Card>
+                  <Card><CardHeader><CardTitle>{t("Envelhecimento de itens (aging)", "Work item aging")}</CardTitle></CardHeader><CardContent><AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} /><ChartNote text={ci.aging} /></CardContent></Card>
+                  <Card><CardHeader><CardTitle>{t("Cycle time — histograma", "Cycle time histogram")}</CardTitle></CardHeader><CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /><ChartNote text={ci.histogram} /></CardContent></Card>
                 </section>
               </>
             )}

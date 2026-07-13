@@ -10,12 +10,13 @@
  */
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useLang } from "@/components/lang-context";
 import { metricLabel } from "@/lib/i18n";
+import { buildChartInsights } from "@/lib/chart-insights";
 import { CycleScatter, VelocityBar, ThroughputBar } from "@/components/charts";
 import { CFDChart, AgingScatter, CycleHistogram } from "@/components/charts-advanced";
 import { MaturityHistoryChart, type MaturityWeek } from "@/components/charts-maturity";
@@ -320,25 +321,27 @@ function PillarSection({ pillar, team, mat, m }: { pillar: Pillar; team: Dashboa
   const isScrum = team.board_type === "scrum";
   const adv = m.advanced;
   const stageOrder: string[] = adv.cfd.stages.map((s: any) => s.jira);
+  const { lang } = useLang();
+  const ci = buildChartInsights(m, lang);
 
   // gráficos por pilar × método (reuso dos componentes existentes)
   const charts: React.ReactNode[] = [];
   if (pillar === "flow") {
     if (isScrum && m.scrum) {
       charts.push(
-        <ChartCard key="vel" title="Velocity por sprint" hint="Contexto — quanto o time entrega por sprint (não entra no tier)">
+        <ChartCard key="vel" title="Velocity por sprint" hint="Contexto — quanto o time entrega por sprint (não entra no tier)" note={ci.velocity}>
           <VelocityBar data={m.scrum.velocity} />
         </ChartCard>
       );
     } else {
       charts.push(
-        <ChartCard key="tp" title="Throughput por semana" hint="Contexto — itens entregues por semana (não entra no tier)">
+        <ChartCard key="tp" title="Throughput por semana" hint="Contexto — itens entregues por semana (não entra no tier)" note={ci.throughput}>
           <ThroughputBar series={m.flow.throughput.series} />
         </ChartCard>
       );
     }
     charts.push(
-      <ChartCard key="cyc" title="Cycle time — distribuição (p50/p85)" hint="Previsibilidade da entrega → Cycle time (p85), em dias">
+      <ChartCard key="cyc" title="Cycle time — distribuição (p50/p85)" hint="Previsibilidade da entrega → Cycle time (p85), em dias" note={ci.cycle}>
         <CycleScatter data={m.flow.scatter} p50={m.flow.deliveryCycleTime.median} p85={m.flow.deliveryCycleTime.p85} />
       </ChartCard>
     );
@@ -346,16 +349,16 @@ function PillarSection({ pillar, team, mat, m }: { pillar: Pillar; team: Dashboa
     // quality
     if (!isScrum) {
       charts.push(
-        <ChartCard key="cfd" title="Cumulative Flow Diagram" hint="Acúmulo por estágio → gargalos de fluxo">
+        <ChartCard key="cfd" title="Cumulative Flow Diagram" hint="Acúmulo por estágio → gargalos de fluxo" note={ci.cfd}>
           <CFDChart stages={adv.cfd.stages} points={adv.cfd.points} />
         </ChartCard>
       );
     }
     charts.push(
-      <ChartCard key="aging" title="Work item aging" hint="Itens parados além do normal → Itens parados (aging)">
+      <ChartCard key="aging" title="Work item aging" hint="Itens parados além do normal → Itens parados (aging)" note={ci.aging}>
         <AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} />
       </ChartCard>,
-      <ChartCard key="hist" title="Histograma de cycle time" hint="Contexto — dispersão do tempo de entrega (em dias)">
+      <ChartCard key="hist" title="Histograma de cycle time" hint="Contexto — dispersão do tempo de entrega (em dias)" note={ci.histogram}>
         <CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} />
       </ChartCard>
     );
@@ -407,12 +410,18 @@ function PillarMetric({ mt, isWeak }: { mt: MetricEval; isWeak: boolean }) {
   );
 }
 
-function ChartCard({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
+function ChartCard({ title, hint, note, children }: { title: string; hint: string; note?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-border p-3">
       <p className="text-sm font-medium">{title}</p>
       <p className="mb-2 text-xs text-muted-foreground">{hint}</p>
       {children}
+      {note && (
+        <p className="mt-2 flex items-start gap-1.5 border-t border-border/60 pt-2 text-[11px] leading-snug text-foreground/80">
+          <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+          <span>{note}</span>
+        </p>
+      )}
     </div>
   );
 }
