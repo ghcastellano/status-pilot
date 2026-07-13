@@ -117,6 +117,19 @@ export default function ConfigPage() {
   const [connectErr, setConnectErr] = React.useState<string | null>(null);
   const [disconnecting, setDisconnecting] = React.useState(false);
 
+  // Prefill do form: URL + e-mail lembrados (sem o token, que é sensível).
+  // Conveniência POR PERFIL do Chrome — a conexão de verdade (incl. token)
+  // fica no banco protegido e vale p/ qualquer usuário, então ninguém redigita
+  // depois do primeiro login; isto só acelera reconexões nesta máquina.
+  React.useEffect(() => {
+    try {
+      setJiraUrl(localStorage.getItem("jira_url") ?? "");
+      setEmail(localStorage.getItem("jira_email") ?? "");
+    } catch {
+      /* localStorage indisponível — segue sem prefill */
+    }
+  }, []);
+
   const loadStatus = React.useCallback(async () => {
     try {
       const r = await fetch("/api/jira/status", { cache: "no-store" });
@@ -201,6 +214,13 @@ export default function ConfigPage() {
       if (!res.ok) {
         setConnectErr(data.error ?? "Falha ao conectar ao Jira.");
         return;
+      }
+      // Lembra URL + e-mail p/ próximo prefill (token NÃO vai pro browser).
+      try {
+        localStorage.setItem("jira_url", jiraUrl.trim());
+        localStorage.setItem("jira_email", email.trim());
+      } catch {
+        /* sem localStorage — ok, conexão já está salva no servidor */
       }
       setToken("");
       await Promise.all([loadStatus(), loadTeams()]);
