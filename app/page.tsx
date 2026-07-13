@@ -51,6 +51,27 @@ export default function DashboardPage() {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [showDetailed, setShowDetailed] = React.useState(false);
   const [mat, setMat] = React.useState<DashboardMaturityData | null>(null);
+  const [autoSyncing, setAutoSyncing] = React.useState(false);
+  const autoSyncedRef = React.useRef<Set<string>>(new Set());
+
+  // Resync TRANSPARENTE ao abrir: se o time é um board real e os dados estão
+  // stale (>30min) ou nunca sincronizados, puxa do Jira em background e recarrega
+  // a view — sem o usuário clicar em nada. Guard por ref evita loop/repetição.
+  const maybeResync = React.useCallback((team: any) => {
+    if (!team?.jira_board_id || autoSyncedRef.current.has(team.id)) return;
+    const last = team.last_synced_at ? Date.parse(team.last_synced_at) : 0;
+    if (Date.now() - last < 30 * 60 * 1000) return; // fresco o bastante
+    autoSyncedRef.current.add(team.id);
+    setAutoSyncing(true);
+    fetch("/api/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId: team.id }),
+    })
+      .then(() => setRefresh((x) => x + 1)) // recarrega métricas + maturidade frescas
+      .catch(() => {})
+      .finally(() => setAutoSyncing(false));
+  }, []);
 
   // Maturidade do time (UNFILTERED — nível é propriedade do time, igual ao Coaching Hub)
   React.useEffect(() => {
@@ -76,7 +97,10 @@ export default function DashboardPage() {
     if (sprint !== "all") qs.set("sprintId", sprint);
     fetch(`/api/metrics?${qs}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : r.json().then((e) => Promise.reject(new Error(e.error)))))
-      .then(setM)
+      .then((d) => {
+        setM(d);
+        maybeResync(d?.team); // resync transparente se stale
+      })
       .catch((e) => setErr(e.message))
       .finally(() => setLoading(false));
   }, [selectedTeam, epic, type, weeks, sprint, refresh]);
@@ -230,6 +254,12 @@ export default function DashboardPage() {
         </div>
       </div>
       {syncMsg && <p className="text-xs text-primary">{syncMsg}</p>}
+      {autoSyncing && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <RefreshCw className="h-3 w-3 animate-spin" />
+          {t("Atualizando dados do Jira em segundo plano…", "Refreshing Jira data in the background…")}
+        </p>
+      )}
 
       {/* ── Seção de Maturidade: nível + referência + 3 pilares (não filtrável) ── */}
       {mat ? (

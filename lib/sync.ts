@@ -61,6 +61,7 @@ export async function syncIssuesFromJira(onlyTeamId?: string): Promise<SyncResul
     // Board REAL do Jira → ingestão via changelog. Sem board_id → path SPMETA (seed).
     if (team.jira_board_id) {
       const count = await ingestBoard(jira, team as TeamRow);
+      await sb.from("teams").update({ last_synced_at: new Date().toISOString() }).eq("id", team.id);
       byTeam.push({ team: team.id, count });
       continue;
     }

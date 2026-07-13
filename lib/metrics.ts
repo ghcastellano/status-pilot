@@ -20,6 +20,7 @@ export interface TeamRow {
   jira_board_id?: string | null; // board real do Jira (null = time seed/sintético)
   jira_board_name?: string | null;
   active?: boolean;
+  last_synced_at?: string | null; // última ingestão do Jira (resync transparente)
 }
 
 export interface SprintRow {

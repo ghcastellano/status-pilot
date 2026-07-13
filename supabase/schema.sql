@@ -29,6 +29,7 @@ create table teams (
   jira_board_id text,                         -- board real do Jira (null = time seed/sintético)
   jira_board_name text,
   active        boolean not null default true, -- desligar sem apagar (deselect no /config)
+  last_synced_at timestamptz,                    -- última ingestão do Jira (resync transparente)
   created_at    timestamptz not null default now()
 );
 
