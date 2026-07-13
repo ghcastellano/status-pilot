@@ -7,6 +7,8 @@
  * já no banco e não são tocados aqui.
  */
 import { jiraProviderFromEnv, extractSpmeta, normStageName, stageToStatus } from "./jira";
+import { ingestBoard } from "./jira-ingest";
+import type { TeamRow } from "./metrics";
 import { getSupabaseAdmin } from "./supabase";
 
 // marco (coluna no banco) → nome do custom field de data no Jira
@@ -40,13 +42,26 @@ export async function syncIssuesFromJira(): Promise<SyncResult> {
   }
   const dateFieldIds = Object.values(fieldId);
 
-  // times (config já no banco)
-  const { data: teams, error } = await sb.from("teams").select("id, jira_project_key");
+  // times ATIVOS (config já no banco)
+  const { data: teams, error } = await sb
+    .from("teams")
+    .select("id, name, board_type, description, jira_project_key, jira_board_id, jira_board_name, active")
+    .eq("active", true);
   if (error) throw new Error(error.message);
 
   const byTeam: { team: string; count: number }[] = [];
   for (const team of teams ?? []) {
-    const pk = team.jira_project_key as string;
+    // Board REAL do Jira → ingestão via changelog. Sem board_id → path SPMETA (seed).
+    if (team.jira_board_id) {
+      const count = await ingestBoard(jira, team as TeamRow);
+      byTeam.push({ team: team.id, count });
+      continue;
+    }
+    const pk = team.jira_project_key as string | null;
+    if (!pk) {
+      byTeam.push({ team: team.id, count: 0 });
+      continue;
+    }
     const issues = await jira.searchJql(
       `project = ${pk}`,
       ["summary", "description", "status", ...dateFieldIds],

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageSquareText, FileText, Plane, Trophy } from "lucide-react";
+import { LayoutDashboard, MessageSquareText, FileText, Plane, Trophy, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -10,6 +10,7 @@ const NAV = [
   { href: "/ask", label: "Perguntar", icon: MessageSquareText },
   { href: "/report", label: "Status Report", icon: FileText },
   { href: "/coaching", label: "Coaching", icon: Trophy },
+  { href: "/config", label: "Configurar", icon: Settings },
 ];
 
 export function Sidebar() {

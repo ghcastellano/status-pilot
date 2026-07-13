@@ -20,12 +20,15 @@ drop table if exists teams cascade;
 
 -- Times = projetos/boards no Jira (um Scrum, um Kanban)
 create table teams (
-  id            text primary key,            -- 'espresso' | 'coldbrew'
+  id            text primary key,            -- 'espresso' | 'coldbrew' | 'board-123'
   name          text not null,
   board_type    text not null check (board_type in ('scrum','kanban')),
   description   text,
   jira_label    text,
   jira_project_key text,                      -- 'LS' | 'LK'
+  jira_board_id text,                         -- board real do Jira (null = time seed/sintético)
+  jira_board_name text,
+  active        boolean not null default true, -- desligar sem apagar (deselect no /config)
   created_at    timestamptz not null default now()
 );
 

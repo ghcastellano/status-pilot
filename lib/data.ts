@@ -4,9 +4,10 @@
 import { getSupabaseAdmin } from "./supabase";
 import type { TeamRow, SprintRow, IssueRow } from "./metrics";
 
+/** Times ATIVOS (deselecionados no /config ficam active=false e somem das telas). */
 export async function fetchTeams(): Promise<TeamRow[]> {
   const sb = getSupabaseAdmin();
-  const { data, error } = await sb.from("teams").select("*").order("name");
+  const { data, error } = await sb.from("teams").select("*").eq("active", true).order("name");
   if (error) throw new Error(error.message);
   return (data ?? []) as TeamRow[];
 }

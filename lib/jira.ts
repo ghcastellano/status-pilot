@@ -63,7 +63,7 @@ export interface JiraProvider {
     issueKey: string
   ): Promise<{ transitions: Array<{ id: string; name: string; to: { name: string } }> }>;
   doTransition(issueKey: string, transitionId: string): Promise<void>;
-  searchJql(jql: string, fields: string[], maxResults?: number): Promise<JiraIssue[]>;
+  searchJql(jql: string, fields: string[], maxResults?: number, expand?: string[]): Promise<JiraIssue[]>;
 }
 
 /**
@@ -188,12 +188,14 @@ abstract class JiraBase implements JiraProvider {
   async searchJql(
     jql: string,
     fields: string[],
-    maxResults = 100
+    maxResults = 100,
+    expand?: string[]
   ): Promise<JiraIssue[]> {
     const all: JiraIssue[] = [];
     let nextPageToken: string | undefined;
     do {
       const body: Record<string, unknown> = { jql, fields, maxResults };
+      if (expand?.length) body.expand = expand.join(","); // /search/jql espera string (CSV), não array
       if (nextPageToken) body.nextPageToken = nextPageToken;
       const data = await this.req<{
         issues: JiraIssue[];
@@ -344,6 +346,13 @@ export interface JiraIssue {
   id: string;
   key: string;
   fields: Record<string, any>;
+  changelog?: { histories?: JiraHistory[] };
+}
+
+export interface JiraHistory {
+  id: string;
+  created: string;
+  items: Array<{ field: string; fieldId?: string; fromString: string | null; toString: string | null }>;
 }
 
 /** normaliza o nome do status ao vivo do Jira p/ casar com os nomes dos estágios. */

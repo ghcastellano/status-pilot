@@ -32,11 +32,13 @@ export const tierLowerBetter = (v: number, platinumBelow: number, silverAbove: n
 export const SCRUM_THRESHOLDS = {
   sayDo: { platinumMin: 90, silverBelow: 75 }, // HB (%) — confiabilidade: entregue ÷ combinado
   cycleP85Days: { platinumBelow: 7, silverAbove: 14 }, // LB (dias) — 85% entregam em ≤ X dias
+  flowEff: { platinumMin: 40, silverBelow: 15 }, // HB (%) — tempo ativo ÷ tempo total (vs. fila)
   defectRate: { platinumBelow: 5, silverAbove: 20 }, // LB (%) — fatia de issues que são bug
 } as const;
 
 export const KANBAN_THRESHOLDS = {
   cycleP85Days: { platinumBelow: 7, silverAbove: 14 }, // LB (dias) — 85% entregam em ≤ X dias
+  flowEff: { platinumMin: 40, silverBelow: 15 }, // HB (%) — tempo ativo ÷ tempo total (vs. fila)
   agingBreach: { platinumBelow: 10, silverAbove: 30 }, // LB (%) — itens parados além do SLE (p85)
   defectRate: { platinumBelow: 5, silverAbove: 20 }, // LB (%) — fatia de issues que são bug
 } as const;
@@ -87,12 +89,14 @@ export function maturityReference(bt: BoardType): MetricBand[] {
     return [
       { label: "Confiabilidade (Say-Do)", silver: `< ${T.sayDo.silverBelow}%`, gold: `${T.sayDo.silverBelow}–${T.sayDo.platinumMin}%`, platinum: `≥ ${T.sayDo.platinumMin}%` },
       { label: "Cycle time (p85)", silver: `> ${T.cycleP85Days.silverAbove} dias`, gold: `${T.cycleP85Days.platinumBelow}–${T.cycleP85Days.silverAbove} dias`, platinum: `< ${T.cycleP85Days.platinumBelow} dias` },
+      { label: "Flow efficiency", silver: `< ${T.flowEff.silverBelow}%`, gold: `${T.flowEff.silverBelow}–${T.flowEff.platinumMin}%`, platinum: `≥ ${T.flowEff.platinumMin}%` },
       { label: "Taxa de defeitos", silver: `> ${T.defectRate.silverAbove}%`, gold: `${T.defectRate.platinumBelow}–${T.defectRate.silverAbove}%`, platinum: `< ${T.defectRate.platinumBelow}%` },
     ];
   }
   const T = KANBAN_THRESHOLDS;
   return [
     { label: "Cycle time (p85)", silver: `> ${T.cycleP85Days.silverAbove} dias`, gold: `${T.cycleP85Days.platinumBelow}–${T.cycleP85Days.silverAbove} dias`, platinum: `< ${T.cycleP85Days.platinumBelow} dias` },
+    { label: "Flow efficiency", silver: `< ${T.flowEff.silverBelow}%`, gold: `${T.flowEff.silverBelow}–${T.flowEff.platinumMin}%`, platinum: `≥ ${T.flowEff.platinumMin}%` },
     { label: "Itens parados (aging)", silver: `> ${T.agingBreach.silverAbove}%`, gold: `${T.agingBreach.platinumBelow}–${T.agingBreach.silverAbove}%`, platinum: `< ${T.agingBreach.platinumBelow}%` },
     { label: "Taxa de defeitos", silver: `> ${T.defectRate.silverAbove}%`, gold: `${T.defectRate.platinumBelow}–${T.defectRate.silverAbove}%`, platinum: `< ${T.defectRate.platinumBelow}%` },
   ];
@@ -185,6 +189,7 @@ export function computeMaturity(m: TeamMetrics): MaturityResult {
   // Derivados em unidade natural. Sem dados ⇒ null ⇒ tier null ⇒ fora do min()
   // (nunca "0" virando Silver/Platinum falso).
   const cycleP85 = f.deliveryCycleTime.count > 0 ? f.deliveryCycleTime.p85 : null; // dias
+  const flowEffPct = f.flowEffSamples > 0 ? Math.round(f.flowEfficiency * 100) : null; // % ativo vs. fila
   // Say-Do só tem sinal com sprints fechadas QUE TÊM committed>0 (a base do
   // sayDoRatioAvg). Guardar por sayDoSprintCount (não closedSprintCount): sem
   // essa base, sayDoRatioAvg=0 (não null) e viraria Silver falso no tier.
@@ -202,12 +207,14 @@ export function computeMaturity(m: TeamMetrics): MaturityResult {
     evals = [
       evalHB("sayDo", "Confiabilidade (Say-Do)", "flow", sayDoPct, T.sayDo, fmtPct),
       evalLB("cycleP85Days", "Cycle time (p85)", "flow", cycleP85, T.cycleP85Days, fmtDays),
+      evalHB("flowEff", "Flow efficiency", "quality", flowEffPct, T.flowEff, fmtPct),
       evalLB("defectRate", "Taxa de defeitos", "quality", f.bugRatio, T.defectRate, fmtPct),
     ];
   } else {
     const T = KANBAN_THRESHOLDS;
     evals = [
       evalLB("cycleP85Days", "Cycle time (p85)", "flow", cycleP85, T.cycleP85Days, fmtDays),
+      evalHB("flowEff", "Flow efficiency", "quality", flowEffPct, T.flowEff, fmtPct),
       evalLB("agingBreach", "Itens parados (aging)", "quality", agingBreach, T.agingBreach, fmtPct),
       evalLB("defectRate", "Taxa de defeitos", "quality", f.bugRatio, T.defectRate, fmtPct),
     ];

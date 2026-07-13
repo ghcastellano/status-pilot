@@ -17,6 +17,9 @@ export interface TeamRow {
   description: string | null;
   jira_label?: string | null;
   jira_project_key?: string | null;
+  jira_board_id?: string | null; // board real do Jira (null = time seed/sintético)
+  jira_board_name?: string | null;
+  active?: boolean;
 }
 
 export interface SprintRow {
@@ -149,9 +152,14 @@ function flowEfficiency(issues: IssueRow[]): { value: number; samples: number } 
   return { value: Math.round((ratios.reduce((a, b) => a + b, 0) / ratios.length) * 100) / 100, samples: ratios.length };
 }
 
-export function computeFlow(issues: IssueRow[], now: number, weeks = 8): FlowMetrics {
+export function computeFlow(issues: IssueRow[], now: number, weeks = 8, deliveredFromMs?: number): FlowMetrics {
   const released = issues.filter((i) => i.released_at);
-  const delivered = issues.filter((i) => i.started_at && i.done_at);
+  // Janela de entrega (Kanban rolling): cycle time / flow eff / defeitos / scatter
+  // contam só itens concluídos dentro da janela. Sem janela ⇒ tudo (Scrum já vem
+  // pré-filtrado por sprints; dashboard detalhado não passa janela).
+  const windowed =
+    deliveredFromMs == null ? issues : issues.filter((i) => i.done_at != null && ms(i.done_at)! >= deliveredFromMs);
+  const delivered = windowed.filter((i) => i.started_at && i.done_at);
 
   const scatter: ScatterPoint[] = delivered
     .map((i) => ({
@@ -196,8 +204,8 @@ export function computeFlow(issues: IssueRow[], now: number, weeks = 8): FlowMet
   const throughputCV = tpCounts.length >= 3 && tpRawAvg > 0 ? Math.sqrt(tpVar) / tpRawAvg : null;
   // Bug ratio — proxy de rework p/ o pilar Quality (rework real bloqueado em
   // changelog ingestion). null quando não há issues (sem dados ≠ 0% de bugs).
-  const bugRatio = issues.length
-    ? Math.round((issues.filter((i) => i.type === "bug").length / issues.length) * 100)
+  const bugRatio = windowed.length
+    ? Math.round((windowed.filter((i) => i.type === "bug").length / windowed.length) * 100)
     : null;
 
   // distribuição por estágio atual (exclui Live/Done — foco no fluxo ativo)
@@ -213,10 +221,10 @@ export function computeFlow(issues: IssueRow[], now: number, weeks = 8): FlowMet
     stage, count: v.count, kind: v.kind,
   }));
 
-  const flowEff = flowEfficiency(issues);
+  const flowEff = flowEfficiency(windowed);
   return {
     discoveryCycleTime: intervalStats(issues, "discovery_started_at", "discovery_done_at"),
-    deliveryCycleTime: intervalStats(issues, "started_at", "done_at"),
+    deliveryCycleTime: intervalStats(windowed, "started_at", "done_at"),
     leadTime: intervalStats(issues, "created_at", "released_at"),
     flowEfficiency: flowEff.value,
     flowEffSamples: flowEff.samples,
@@ -294,7 +302,7 @@ export function computeScrum(sprints: SprintRow[], issues: IssueRow[], now: numb
     currentSprint = {
       id: active.id, name: active.name, goal: active.goal,
       committed: active.committed_points, completed,
-      sayDo: completed / active.committed_points, daysElapsed, daysTotal,
+      sayDo: active.committed_points > 0 ? completed / active.committed_points : 0, daysElapsed, daysTotal,
     };
     const committed = active.committed_points;
     const sis = issues.filter((i) => i.sprint_id === active.id);
@@ -303,7 +311,7 @@ export function computeScrum(sprints: SprintRow[], issues: IssueRow[], now: numb
       const burned = sis.filter((i) => i.done_at && ms(i.done_at)! <= dayEnd).reduce((a, i) => a + (i.story_points ?? 0), 0);
       burndown.push({
         day: d, date: new Date(dayEnd).toISOString().slice(0, 10),
-        ideal: round1(committed - (committed * d) / daysTotal),
+        ideal: round1(committed - (committed * d) / (daysTotal || 1)),
         actual: dayEnd <= now ? committed - burned : null,
       });
     }
@@ -353,13 +361,15 @@ function computeCFD(issues: IssueRow[], order: ReturnType<typeof canonicalStages
 function computeAging(issues: IssueRow[], now: number): AgingPoint[] {
   return issues
     .filter((i) => !/opportunity backlog/i.test(i.current_stage) && !/live\s*\/\s*done/i.test(i.current_stage))
-    .map((i) => {
+    .map((i): AgingPoint | null => {
       const st = i.stages.find((s) => s.jira === i.current_stage) ?? i.stages[i.stages.length - 1];
+      if (!st) return null; // issue sem stages → não estoura o new Date(st.at)
       return {
         key: i.issue_key, title: i.title, stage: i.current_stage,
-        stageKey: st?.key ?? "", ageDays: round1((now - new Date(st.at).getTime()) / DAY), kind: st?.kind ?? "wait",
+        stageKey: st.key ?? "", ageDays: round1((now - new Date(st.at).getTime()) / DAY), kind: st.kind ?? "wait",
       };
     })
+    .filter((p): p is AgingPoint => p != null)
     .sort((a, b) => b.ageDays - a.ageDays);
 }
 
@@ -404,7 +414,15 @@ function computeAdvanced(issues: IssueRow[], now: number, weeks: number): Advanc
   };
 }
 
-export interface FilterOptions { epic?: string | null; type?: string | null; weeks?: number; sprintId?: string | null; asOf?: number }
+export interface FilterOptions {
+  epic?: string | null;
+  type?: string | null;
+  weeks?: number;
+  sprintId?: string | null;
+  asOf?: number;
+  sprintIds?: string[]; // janela Scrum: só estas sprints (maturidade — últimas N/selecionadas)
+  cycleWeeks?: number; // janela Kanban rolling: cycle/flow/defeitos só de itens entregues nas últimas N semanas
+}
 
 export interface TeamMetrics {
   team: TeamRow;
@@ -437,17 +455,25 @@ export function computeTeamMetrics(
   if (opts.epic) ti = ti.filter((i) => i.epic_key === opts.epic);
   if (opts.type) ti = ti.filter((i) => i.type === opts.type);
 
-  // filtro de sprint: apenas para métricas de fluxo (não afeta histórico de velocity/say-do)
-  const flowIssues = (opts.sprintId && team.board_type === "scrum")
-    ? ti.filter((i) => i.sprint_id === opts.sprintId)
-    : ti;
+  // Janela de maturidade: Scrum por sprints (últimas N/selecionadas → sprintIds),
+  // Kanban por semanas (cycleWeeks → janela rolling de entrega). O filtro single
+  // sprintId segue servindo o dashboard detalhado.
+  const winSprintIds = opts.sprintIds?.length ? new Set(opts.sprintIds) : null;
+  let flowIssues = ti;
+  if (team.board_type === "scrum") {
+    if (winSprintIds) flowIssues = ti.filter((i) => i.sprint_id != null && winSprintIds.has(i.sprint_id));
+    else if (opts.sprintId) flowIssues = ti.filter((i) => i.sprint_id === opts.sprintId);
+  }
 
   const now = opts.asOf ?? referenceNow(allTeam);
-  const flow = computeFlow(flowIssues, now, weeks);
+  const deliveredFromMs =
+    team.board_type === "kanban" && opts.cycleWeeks ? now - opts.cycleWeeks * 7 * DAY : undefined;
+  const flow = computeFlow(flowIssues, now, weeks, deliveredFromMs);
   const advanced = computeAdvanced(flowIssues, now, weeks);
-  const scrum = team.board_type === "scrum"
-    ? computeScrum(sprints.filter((s) => s.team_id === team.id), ti, now)
-    : null;
+  const teamSprints = sprints.filter(
+    (s) => s.team_id === team.id && (winSprintIds ? winSprintIds.has(s.id) : true)
+  );
+  const scrum = team.board_type === "scrum" ? computeScrum(teamSprints, ti, now) : null;
   const epics = new Set(flowIssues.map((i) => i.epic_key).filter(Boolean)).size;
 
   return {
