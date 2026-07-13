@@ -9,10 +9,15 @@ import { randomUUID } from "node:crypto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// read:jira-work/user cobrem /rest/api/3 (search, fields, status). Os endpoints
-// Agile (/rest/agile/1.0 board+sprint) exigem os scopes granulares de Jira Software.
+// SCOPES 100% GRANULARES (sem clássicos). Misturar clássico (read:jira-work) com
+// granular quebra a Agile API com "scope does not match" — então tudo granular:
+//   read:board-scope:jira-software → boards (Agile)
+//   read:sprint:jira-software      → sprints (Agile)
+//   read:issue-details:jira        → issues + changelog (search/jql)
+//   read:project:jira              → project/search
+// (/field, /status, /myself degradam com fallback se não vierem — ingestão é resiliente)
 const SCOPE =
-  "read:jira-work read:jira-user read:board-scope:jira-software read:sprint:jira-software offline_access";
+  "read:board-scope:jira-software read:sprint:jira-software read:issue-details:jira read:project:jira offline_access";
 
 export async function GET() {
   const clientId = process.env.JIRA_OAUTH_CLIENT_ID;
