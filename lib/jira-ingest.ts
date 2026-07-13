@@ -154,59 +154,47 @@ function mapIssue(
   };
 }
 
-/** Sprints do board + membership real (por sprint) — mais confiável que o campo Sprint. */
-async function fetchSprintsAndMembership(
-  jira: JiraProvider,
-  boardId: string,
+/**
+ * Sprints extraídos do campo Sprint das issues (v3) — evita a Agile API
+ * (/rest/agile), que a política OAuth do Jira corporativo bloqueia. O campo
+ * Sprint traz objetos {id,state,name,startDate,endDate,completeDate,goal}.
+ */
+function sprintsFromIssues(
+  issues: JiraIssue[],
+  issueRows: IssueRow[],
+  sprintField: string | null,
   teamId: string
-): Promise<{ sprints: Omit<SprintRow, "committed_points">[]; membership: Map<string, string> }> {
-  const values: any[] = [];
-  let startAt = 0;
-  for (let p = 0; p < 20; p++) {
-    const data = await jira.raw<{ values?: any[]; isLast?: boolean }>(
-      "GET",
-      `/rest/agile/1.0/board/${boardId}/sprint?startAt=${startAt}&maxResults=50`
-    );
-    values.push(...(data.values ?? []));
-    if (data.isLast || !data.values?.length) break;
-    startAt += 50;
-  }
-  const membership = new Map<string, string>();
-  const sprints: Omit<SprintRow, "committed_points">[] = [];
-  // fallback p/ sprints future/sem datas: start_date/end_date são NOT NULL date —
-  // "" quebraria o upsert DEPOIS do delete de issues (perda de dados no sync).
+): SprintRow[] {
+  if (!sprintField) return [];
   const today = new Date().toISOString().slice(0, 10);
-  for (const s of values) {
-    const id = String(s.id);
-    const start = ((s.startDate ?? s.activatedDate ?? s.createdDate ?? "") as string).slice(0, 10) || today;
-    const end = ((s.completeDate ?? s.endDate ?? s.startDate ?? "") as string).slice(0, 10) || start;
-    const state: SprintRow["state"] = s.state === "closed" ? "closed" : s.state === "active" ? "active" : "future";
-    sprints.push({ id, team_id: teamId, name: s.name ?? id, goal: s.goal ?? null, start_date: start, end_date: end, state });
-    // membership: issues do sprint (só precisa das keys)
-    try {
-      let sa = 0;
-      for (let q = 0; q < 20; q++) {
-        const data = await jira.raw<{ issues?: Array<{ key: string }>; isLast?: boolean; total?: number }>(
-          "GET",
-          `/rest/agile/1.0/board/${boardId}/sprint/${id}/issue?startAt=${sa}&maxResults=50&fields=key`
-        );
-        for (const it of data.issues ?? []) membership.set(it.key, id);
-        const n = data.issues?.length ?? 0;
-        if (n < 50) break;
-        sa += 50;
-      }
-    } catch {
-      /* sprint sem acesso a issues — ignora membership dele */
+  const meta = new Map<string, Omit<SprintRow, "committed_points">>();
+  for (const i of issues) {
+    const arr = i.fields[sprintField];
+    if (!Array.isArray(arr)) continue;
+    for (const s of arr) {
+      if (!s || s.id == null) continue;
+      const id = String(s.id);
+      if (meta.has(id)) continue;
+      const start = ((s.startDate ?? s.activatedDate ?? "") as string).slice(0, 10) || today;
+      const end = ((s.completeDate ?? s.endDate ?? s.startDate ?? "") as string).slice(0, 10) || start;
+      const state: SprintRow["state"] = s.state === "closed" ? "closed" : s.state === "active" ? "active" : "future";
+      meta.set(id, { id, team_id: teamId, name: s.name ?? id, goal: s.goal ?? null, start_date: start, end_date: end, state });
     }
   }
-  return { sprints, membership };
+  const spBy = new Map<string, number>();
+  for (const r of issueRows) if (r.sprint_id) spBy.set(r.sprint_id, (spBy.get(r.sprint_id) ?? 0) + (r.story_points ?? 0));
+  return Array.from(meta.values()).map((s) => ({ ...s, committed_points: Math.round(spBy.get(s.id) ?? 0) }));
 }
 
-/** Ingesta um board real → grava issues (+ sprints se scrum). Retorna nº de issues. */
+/**
+ * Ingesta um PROJETO real do Jira (só /rest/api/3 — sem Agile API). Deriva
+ * cycle time/stages do changelog e sprints do campo Sprint das issues.
+ * board_type é DETECTADO (scrum se há sprints, senão kanban) e corrigido no time.
+ * Retorna nº de issues.
+ */
 export async function ingestBoard(jira: JiraProvider, team: TeamRow): Promise<number> {
   const projectKey = team.jira_project_key;
-  const boardId = team.jira_board_id;
-  if (!projectKey || !boardId) throw new Error(`Time ${team.id} sem jira_project_key/jira_board_id.`);
+  if (!projectKey) throw new Error(`Time ${team.id} sem jira_project_key.`);
   const sb = getSupabaseAdmin();
 
   const [spField, sprintField, catOf] = await Promise.all([
@@ -215,23 +203,18 @@ export async function ingestBoard(jira: JiraProvider, team: TeamRow): Promise<nu
     fetchStatusCategories(jira),
   ]);
 
-  // Janela: não-Done OU resolvidas nas últimas ~26 semanas (bound razoável p/ p85).
-  const jql = `project = "${projectKey}" AND (statusCategory != Done OR resolved >= -182d) ORDER BY created DESC`;
+  // Janela: não-Done OU resolvidas nas últimas ~13 semanas; cap 500 issues mais
+  // recentes (projetos grandes têm milhares — limite de 60s serverless + p85).
+  const jql = `project = "${projectKey}" AND (statusCategory != Done OR resolved >= -91d) ORDER BY updated DESC`;
   const fields = ["summary", "issuetype", "status", "created", "resolutiondate", "parent", spField, sprintField].filter(
     (x): x is string => !!x
   );
-  const issues = await jira.searchJql(jql, fields, 100, ["changelog"]);
+  const issues = await jira.searchJql(jql, fields, 100, ["changelog"], 500);
   const issueRows = issues.map((i) => mapIssue(i, team.id, spField, sprintField, catOf));
 
-  // Sprints + membership real (scrum)
-  let sprintRows: SprintRow[] = [];
-  if (team.board_type === "scrum") {
-    const { sprints, membership } = await fetchSprintsAndMembership(jira, boardId, team.id);
-    if (membership.size) for (const r of issueRows) r.sprint_id = membership.get(r.issue_key) ?? null;
-    const spBySprint = new Map<string, number>();
-    for (const r of issueRows) if (r.sprint_id) spBySprint.set(r.sprint_id, (spBySprint.get(r.sprint_id) ?? 0) + (r.story_points ?? 0));
-    sprintRows = sprints.map((s) => ({ ...s, committed_points: Math.round(spBySprint.get(s.id) ?? 0) }));
-  }
+  // Sprints do campo Sprint. Tipo detectado: scrum se há sprints, senão kanban.
+  const sprintRows = sprintsFromIssues(issues, issueRows, sprintField, team.id);
+  const detectedType: TeamRow["board_type"] = sprintRows.length > 0 ? "scrum" : "kanban";
 
   // FK: issue.sprint_id precisa existir em sprints (ou null)
   const sprintIds = new Set(sprintRows.map((s) => s.id));
@@ -239,16 +222,17 @@ export async function ingestBoard(jira: JiraProvider, team: TeamRow): Promise<nu
 
   // Escrita: sprints antes das issues (FK). delete-then-insert por time.
   await sb.from("issues").delete().eq("team_id", team.id);
-  if (team.board_type === "scrum") {
-    await sb.from("sprints").delete().eq("team_id", team.id);
-    if (sprintRows.length) {
-      const { error } = await sb.from("sprints").upsert(sprintRows);
-      if (error) throw new Error(`sprints ${team.id}: ${error.message}`);
-    }
+  await sb.from("sprints").delete().eq("team_id", team.id);
+  if (sprintRows.length) {
+    const { error } = await sb.from("sprints").upsert(sprintRows);
+    if (error) throw new Error(`sprints ${team.id}: ${error.message}`);
   }
   for (let k = 0; k < issueRows.length; k += 200) {
     const { error } = await sb.from("issues").insert(issueRows.slice(k, k + 200));
     if (error) throw new Error(`issues ${team.id}: ${error.message}`);
+  }
+  if (detectedType !== team.board_type) {
+    await sb.from("teams").update({ board_type: detectedType }).eq("id", team.id);
   }
   await sb.from("qa_cache").delete().eq("team_id", team.id);
   return issueRows.length;

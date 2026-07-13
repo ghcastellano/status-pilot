@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * /config — Configurar Jira + selecionar boards como times.
- * Conecta via OAuth, lista os boards do site conectado e liga/desliga cada um
- * como time (POST/DELETE /api/teams). Botão de sincronizar reaproveita /api/sync.
+ * /config — Configurar Jira + selecionar projetos como times.
+ * Conecta via OAuth, busca PROJETOS do Jira (server-side, /rest/api/3) e liga/
+ * desliga cada um como time (POST/DELETE /api/teams). O tipo scrum/kanban é
+ * detectado na sincronização. Botão de sincronizar reaproveita /api/sync.
  */
 import * as React from "react";
 import {
@@ -12,6 +13,8 @@ import {
   Search,
   Plug,
   AlertCircle,
+  X,
+  Loader2,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,10 +29,11 @@ interface JiraStatus {
   account_name: string | null;
 }
 
+// Cada "board" agora é um PROJETO do Jira (id === projectKey).
 interface Board {
-  id: number;
+  id: string;
   name: string;
-  type: string; // scrum | kanban | simple
+  type: string; // sempre "unknown" aqui — tipo real detectado na sync
   projectKey: string | null;
   projectName: string | null;
 }
@@ -74,11 +78,6 @@ function Switch({
   );
 }
 
-// board.type do Jira Agile → board_type ('simple' também é kanban)
-function toBoardType(t: string): "scrum" | "kanban" {
-  return t.toLowerCase() === "scrum" ? "scrum" : "kanban";
-}
-
 function TypeBadge({ type }: { type: "scrum" | "kanban" }) {
   return (
     <Badge
@@ -98,7 +97,9 @@ function TypeBadge({ type }: { type: "scrum" | "kanban" }) {
 export default function ConfigPage() {
   const [status, setStatus] = React.useState<JiraStatus | null>(null);
   const [boards, setBoards] = React.useState<Board[] | null>(null);
+  const [total, setTotal] = React.useState(0);
   const [boardsErr, setBoardsErr] = React.useState<string | null>(null);
+  const [boardsLoading, setBoardsLoading] = React.useState(false);
   const [teams, setTeams] = React.useState<TeamRow[]>([]);
   const [q, setQ] = React.useState("");
   const [pending, setPending] = React.useState<Record<string, boolean>>({});
@@ -140,40 +141,64 @@ export default function ConfigPage() {
     }
   }, []);
 
-  const loadBoards = React.useCallback(async () => {
+  // Busca server-side de projetos. Sem query → primeiros 50 (default da API).
+  const searchBoards = React.useCallback(async (query: string) => {
+    setBoardsLoading(true);
     setBoardsErr(null);
     try {
-      const r = await fetch("/api/jira/boards", { cache: "no-store" });
+      const url = query
+        ? `/api/jira/boards?q=${encodeURIComponent(query)}`
+        : "/api/jira/boards";
+      const r = await fetch(url, { cache: "no-store" });
       const d = await r.json();
       if (!r.ok) {
-        setBoardsErr(d.error ?? "Falha ao carregar boards.");
+        setBoardsErr(d.error ?? "Falha ao buscar projetos.");
         setBoards([]);
+        setTotal(0);
         return;
       }
       setBoards((d.boards ?? []) as Board[]);
+      setTotal(d.total ?? 0);
     } catch (e) {
       setBoardsErr((e as Error).message);
       setBoards([]);
+      setTotal(0);
+    } finally {
+      setBoardsLoading(false);
     }
   }, []);
 
   React.useEffect(() => {
     loadStatus();
     loadTeams();
-    loadBoards();
-  }, [loadStatus, loadTeams, loadBoards]);
+  }, [loadStatus, loadTeams]);
 
-  // Set dos board ids ativos (times ativos com jira_board_id)
+  // Debounce (~350ms) da busca. Só dispara quando o Jira está conectado.
+  React.useEffect(() => {
+    if (!status?.connected) return;
+    const t = setTimeout(() => {
+      void searchBoards(q.trim());
+    }, 350);
+    return () => clearTimeout(t);
+  }, [q, status?.connected, searchBoards]);
+
+  // Set dos projectKeys ativos (times ativos com jira_board_id)
   const activeBoardIds = React.useMemo(() => {
     const s = new Set<string>();
     for (const t of teams) if (t.active && t.jira_board_id) s.add(t.jira_board_id);
     return s;
   }, [teams]);
 
-  const isOn = (b: Board) => activeBoardIds.has(String(b.id));
+  const isOn = (b: Board) => activeBoardIds.has(b.id);
 
-  async function toggle(b: Board, next: boolean) {
-    const key = String(b.id);
+  // Liga/desliga um projeto como time. Otimista + revert-via-reload.
+  async function setTeamActive(
+    projectKey: string,
+    name: string,
+    projectName: string | null,
+    next: boolean
+  ) {
+    const key = projectKey;
     setPending((p) => ({ ...p, [key]: true }));
     // otimista
     setTeams((prev) => {
@@ -188,8 +213,8 @@ export default function ConfigPage() {
           ...prev,
           {
             id: `board-${key}`,
-            name: b.name,
-            board_type: toBoardType(b.type),
+            name,
+            board_type: "scrum",
             jira_board_id: key,
             active: true,
           },
@@ -205,12 +230,10 @@ export default function ConfigPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            boardId: b.id,
-            name: b.name,
-            boardType: toBoardType(b.type),
-            projectKey: b.projectKey ?? undefined,
-            projectName: b.projectName ?? undefined,
-            active: true,
+            boardId: projectKey,
+            name,
+            projectKey,
+            projectName: projectName ?? undefined,
           }),
         });
       } else {
@@ -238,6 +261,7 @@ export default function ConfigPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Falha no sync");
       setSyncMsg(`${data.total} itens sincronizados do Jira`);
+      await loadTeams();
     } catch (e) {
       setSyncMsg((e as Error).message);
     } finally {
@@ -246,32 +270,15 @@ export default function ConfigPage() {
     }
   }
 
-  // Agrupamento por projeto
-  const query = q.trim().toLowerCase();
-  const filtered = (boards ?? []).filter(
-    (b) =>
-      !query ||
-      b.name.toLowerCase().includes(query) ||
-      (b.projectName ?? "").toLowerCase().includes(query) ||
-      (b.projectKey ?? "").toLowerCase().includes(query)
-  );
-  const groups = React.useMemo(() => {
-    const map = new Map<string, { label: string; boards: Board[] }>();
-    for (const b of filtered) {
-      const key = b.projectKey ?? b.projectName ?? "—";
-      const label = b.projectName
-        ? `${b.projectName}${b.projectKey ? ` (${b.projectKey})` : ""}`
-        : b.projectKey ?? "Sem projeto";
-      if (!map.has(key)) map.set(key, { label, boards: [] });
-      map.get(key)!.boards.push(b);
-    }
-    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [filtered]);
-
   const connected = status?.connected;
   const notConnected = status != null && !connected;
   const boardsBlocked = boardsErr != null;
-  const activeCount = activeBoardIds.size;
+
+  // Times configurados: times ativos com um projeto Jira vinculado.
+  const configuredTeams = React.useMemo(
+    () => teams.filter((t) => t.active && t.jira_board_id),
+    [teams]
+  );
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -279,7 +286,7 @@ export default function ConfigPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Configurar Jira</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Conecte sua conta do Jira e escolha quais boards viram times monitorados.
+          Conecte sua conta do Jira e escolha quais projetos viram times monitorados.
         </p>
       </div>
 
@@ -333,24 +340,25 @@ export default function ConfigPage() {
         </CardContent>
       </Card>
 
-      {/* Board selection */}
+      {/* Projetos → times */}
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div className="space-y-1.5">
-            <CardTitle>Boards → times</CardTitle>
+            <CardTitle>Projetos → times</CardTitle>
             <p className="text-xs text-muted-foreground">
-              {activeCount} {activeCount === 1 ? "board ativo" : "boards ativos"} como time.
+              {configuredTeams.length}{" "}
+              {configuredTeams.length === 1 ? "time configurado" : "times configurados"}.
             </p>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           {notConnected || boardsBlocked ? (
             <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border p-5">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <AlertCircle className="h-4 w-4" />
                 {boardsBlocked && !notConnected
                   ? boardsErr
-                  : "Conecte o Jira primeiro para listar os boards."}
+                  : "Conecte o Jira primeiro para buscar projetos."}
               </div>
               <Button
                 variant="outline"
@@ -364,59 +372,109 @@ export default function ConfigPage() {
             </div>
           ) : (
             <>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar board ou projeto…"
-                  className="pl-9"
-                />
+              {/* Times configurados */}
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Times configurados
+                </p>
+                {configuredTeams.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+                    Nenhum time configurado ainda — busque um projeto abaixo.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border rounded-lg border border-border">
+                    {configuredTeams.map((t) => (
+                      <li key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{t.name}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {t.jira_board_id}
+                          </p>
+                        </div>
+                        <TypeBadge type={t.board_type} />
+                        <button
+                          type="button"
+                          aria-label={`Remover ${t.name}`}
+                          disabled={!!pending[t.jira_board_id ?? ""]}
+                          onClick={() =>
+                            setTeamActive(t.jira_board_id!, t.name, null, false)
+                          }
+                          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive disabled:opacity-50"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {configuredTeams.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Clique em “Sincronizar agora” abaixo para puxar os dados e detectar o
+                    tipo (scrum/kanban).
+                  </p>
+                )}
               </div>
 
-              {boards == null ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="h-12 animate-pulse rounded-lg bg-muted" />
-                  ))}
+              {/* Busca de projetos */}
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder="Buscar projeto por nome ou key…"
+                    className="pl-9 pr-9"
+                  />
+                  {boardsLoading && (
+                    <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                  )}
                 </div>
-              ) : groups.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  Nenhum board encontrado.
-                </p>
-              ) : (
-                <div className="space-y-5">
-                  {groups.map((g) => (
-                    <div key={g.label}>
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {g.label}
-                      </p>
-                      <ul className="divide-y divide-border rounded-lg border border-border">
-                        {g.boards.map((b) => {
-                          const on = isOn(b);
-                          const bt = toBoardType(b.type);
-                          return (
-                            <li key={b.id} className="flex items-center gap-3 px-4 py-2.5">
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-medium">{b.name}</p>
-                                <p className="text-[11px] text-muted-foreground">
-                                  board {b.id}
-                                </p>
-                              </div>
-                              <TypeBadge type={bt} />
-                              <Switch
-                                on={on}
-                                onChange={(v) => toggle(b, v)}
-                                disabled={!!pending[String(b.id)]}
-                              />
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
+
+                {boards == null ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="h-12 animate-pulse rounded-lg bg-muted" />
+                    ))}
+                  </div>
+                ) : boards.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    Nenhum projeto encontrado.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[11px] text-muted-foreground">
+                      {q.trim()
+                        ? `${boards.length} de ${total} projetos · tipo detectado ao sincronizar`
+                        : `Digite para buscar entre os ${total} projetos · tipo detectado ao sincronizar`}
+                    </p>
+                    <ul className="divide-y divide-border rounded-lg border border-border">
+                      {boards.map((b) => {
+                        const on = isOn(b);
+                        return (
+                          <li
+                            key={b.id}
+                            className="flex items-center gap-3 px-4 py-2.5"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">{b.name}</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {b.projectKey ?? b.id}
+                              </p>
+                            </div>
+                            <Switch
+                              on={on}
+                              onChange={(v) =>
+                                setTeamActive(b.id, b.name, b.projectName, v)
+                              }
+                              disabled={!!pending[b.id]}
+                            />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                )}
+              </div>
             </>
           )}
         </CardContent>
@@ -429,7 +487,7 @@ export default function ConfigPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground">
-            Puxa issues, sprints e épicos dos boards ativos para o painel.
+            Puxa issues, sprints e épicos dos times ativos e detecta o tipo de cada um.
           </p>
           <Button variant="outline" onClick={doSync} disabled={syncing}>
             <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />

@@ -30,7 +30,7 @@ interface CreateTeamBody {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Partial<CreateTeamBody>;
-    const { boardId, name, boardType } = body;
+    const { boardId, name } = body;
 
     if (boardId === undefined || boardId === null || String(boardId).length === 0) {
       return NextResponse.json({ error: "boardId é obrigatório." }, { status: 400 });
@@ -38,12 +38,8 @@ export async function POST(req: Request) {
     if (!name || !name.trim()) {
       return NextResponse.json({ error: "name é obrigatório." }, { status: 400 });
     }
-    if (boardType !== "scrum" && boardType !== "kanban") {
-      return NextResponse.json(
-        { error: "boardType deve ser 'scrum' ou 'kanban'." },
-        { status: 400 }
-      );
-    }
+    // tipo real é DETECTADO na ingestão (presença de sprints); aqui é só um default.
+    const boardType = body.boardType === "kanban" ? "kanban" : "scrum";
 
     const row = {
       id: `board-${boardId}`,

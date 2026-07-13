@@ -63,7 +63,7 @@ export interface JiraProvider {
     issueKey: string
   ): Promise<{ transitions: Array<{ id: string; name: string; to: { name: string } }> }>;
   doTransition(issueKey: string, transitionId: string): Promise<void>;
-  searchJql(jql: string, fields: string[], maxResults?: number, expand?: string[]): Promise<JiraIssue[]>;
+  searchJql(jql: string, fields: string[], maxResults?: number, expand?: string[], maxTotal?: number): Promise<JiraIssue[]>;
 }
 
 /**
@@ -189,7 +189,8 @@ abstract class JiraBase implements JiraProvider {
     jql: string,
     fields: string[],
     maxResults = 100,
-    expand?: string[]
+    expand?: string[],
+    maxTotal?: number
   ): Promise<JiraIssue[]> {
     const all: JiraIssue[] = [];
     let nextPageToken: string | undefined;
@@ -203,6 +204,8 @@ abstract class JiraBase implements JiraProvider {
         isLast?: boolean;
       }>("POST", "/rest/api/3/search/jql", body);
       all.push(...(data.issues ?? []));
+      // cap total (projetos grandes têm milhares de issues; ingestão só precisa de uma janela recente)
+      if (maxTotal != null && all.length >= maxTotal) break;
       nextPageToken = data.isLast ? undefined : data.nextPageToken;
     } while (nextPageToken);
     return all;
