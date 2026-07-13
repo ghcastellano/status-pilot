@@ -106,7 +106,6 @@ export default function ConfigPage() {
   const [teams, setTeams] = React.useState<TeamRow[]>([]);
   const [q, setQ] = React.useState("");
   const [pending, setPending] = React.useState<Record<string, boolean>>({});
-  const [banner, setBanner] = React.useState<string | null>(null);
   const [syncing, setSyncing] = React.useState(false);
   const [syncMsg, setSyncMsg] = React.useState<string | null>(null);
 
@@ -117,21 +116,6 @@ export default function ConfigPage() {
   const [submitting, setSubmitting] = React.useState(false);
   const [connectErr, setConnectErr] = React.useState<string | null>(null);
   const [disconnecting, setDisconnecting] = React.useState(false);
-
-  // Banner de retorno do OAuth (?jira=connected|error)
-  React.useEffect(() => {
-    const j = new URLSearchParams(window.location.search).get("jira");
-    if (j === "connected" || j === "error") {
-      setBanner(
-        j === "connected"
-          ? "Jira conectado via OAuth ✓"
-          : "Falha ao conectar o Jira — verifique as credenciais OAuth."
-      );
-      window.history.replaceState({}, "", "/config");
-      const t = setTimeout(() => setBanner(null), 5000);
-      return () => clearTimeout(t);
-    }
-  }, []);
 
   const loadStatus = React.useCallback(async () => {
     try {
@@ -347,17 +331,6 @@ export default function ConfigPage() {
         </p>
       </div>
 
-      {banner && (
-        <p
-          className={cn(
-            "text-sm",
-            banner.includes("✓") ? "text-primary" : "text-destructive"
-          )}
-        >
-          {banner}
-        </p>
-      )}
-
       {/* Connection card */}
       <Card>
         <CardHeader>
@@ -487,17 +460,6 @@ export default function ConfigPage() {
                 As credenciais ficam no servidor (Supabase), usadas só para ler o
                 seu Jira. Você pode desconectar quando quiser.
               </p>
-
-              {/* OAuth alternativo */}
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.href = "/api/jira/connect";
-                }}
-                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-              >
-                ou conectar via OAuth 2.0 (3LO)
-              </button>
             </div>
           )}
         </CardContent>

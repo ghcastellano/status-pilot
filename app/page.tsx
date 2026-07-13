@@ -94,16 +94,6 @@ export default function DashboardPage() {
     setSprint("all");
   }, [selectedTeam?.id]);
 
-  // Retorno do fluxo OAuth do Jira (/api/jira/callback → /?jira=connected|error)
-  React.useEffect(() => {
-    const j = new URLSearchParams(window.location.search).get("jira");
-    if (j !== "connected" && j !== "error") return;
-    setSyncMsg(j === "connected" ? "Jira conectado via OAuth ✓" : "Falha ao conectar o Jira — verifique as credenciais OAuth.");
-    window.history.replaceState({}, "", window.location.pathname);
-    const t = setTimeout(() => setSyncMsg(null), 5000);
-    return () => clearTimeout(t);
-  }, []);
-
   async function doSync() {
     setSyncing(true);
     setSyncMsg(null);
@@ -210,16 +200,11 @@ export default function DashboardPage() {
             <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
             {syncing ? "Sincronizando…" : "Sincronizar"}
           </Button>
-          <Button
-            variant="ghost"
-            className="text-muted-foreground"
-            title="Conectar um Jira via OAuth 2.0 (3LO) — o padrão moderno pré-Forge"
-            onClick={() => {
-              window.location.href = "/api/jira/connect";
-            }}
-          >
-            Conectar Jira
-          </Button>
+          <Link href="/config">
+            <Button variant="ghost" className="text-muted-foreground" title="Configurar conexão do Jira e times">
+              Configurar
+            </Button>
+          </Link>
         </div>
       </div>
       {syncMsg && <p className="text-xs text-primary">{syncMsg}</p>}

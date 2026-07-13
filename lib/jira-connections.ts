@@ -1,21 +1,14 @@
 /**
- * lib/jira-connections.ts — persistência da conexão OAuth 2.0 (3LO) com o Jira
- * na tabela `jira_connections` (SOMENTE backend, usa service_role).
+ * lib/jira-connections.ts — persistência da conexão Basic (email + API token)
+ * com o Jira na tabela `jira_connections` (SOMENTE backend, usa service_role).
  *
- * Linha única id='default': o site conectado e seus tokens. Tokens ficam só no
- * servidor — nunca importe este módulo em "use client".
+ * Multi-tenant por linha única id='default': o site conectado no /config e suas
+ * credenciais. O token fica só no servidor — nunca importe em "use client".
  */
 import { getSupabaseAdmin } from "./supabase";
 
 export interface JiraConnection {
-  auth_type: "oauth" | "basic";
-  cloud_id: string | null;
   site_url: string;
-  access_token: string | null;
-  refresh_token: string | null;
-  expires_at: string | null; // ISO 8601 (OAuth)
-  scopes: string | null;
-  account_id: string | null;
   account_name: string | null;
   basic_email: string | null; // Basic auth (form no /config)
   basic_token: string | null;
@@ -35,17 +28,6 @@ export async function getJiraConnection(): Promise<JiraConnection | null> {
   return (data ?? null) as JiraConnection | null;
 }
 
-export async function saveJiraConnection(conn: JiraConnection): Promise<void> {
-  const sb = getSupabaseAdmin();
-  const { error } = await sb
-    .from("jira_connections")
-    .upsert(
-      { id: "default", ...conn, updated_at: new Date().toISOString() },
-      { onConflict: "id" }
-    );
-  if (error) throw new Error(error.message);
-}
-
 /** Conexão Basic (email + API token) — form do /config, multi-empresa. */
 export async function saveBasicConnection(input: {
   site_url: string;
@@ -62,13 +44,6 @@ export async function saveBasicConnection(input: {
       basic_email: input.email,
       basic_token: input.token,
       account_name: input.account_name ?? input.email,
-      // limpa campos OAuth
-      cloud_id: null,
-      access_token: null,
-      refresh_token: null,
-      expires_at: null,
-      scopes: null,
-      account_id: null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "id" }

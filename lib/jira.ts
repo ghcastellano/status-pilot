@@ -1,21 +1,18 @@
 /**
  * lib/jira.ts — cliente mínimo da Jira Cloud REST API v3.
  *
- * Dois modos de autenticação, atrás da MESMA interface `JiraProvider`:
- *   1. Basic (email + API token) — `JiraClient`. Usado por scripts/lib/sync.ts
- *      (Node/tsx), base `https://SEUNOME.atlassian.net`.
- *   2. OAuth 2.0 (3LO) — `OAuthProvider`. Resolve token/cloudId da tabela
- *      `jira_connections`, base `https://api.atlassian.com/ex/jira/{cloudId}`,
- *      com auto-refresh do access_token.
- * Docs: https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/
+ * Autenticação Basic (email + API token), atrás da interface `JiraProvider`:
+ *   1. `JiraClient` — Basic via env, para scripts/lib/sync.ts (Node/tsx),
+ *      base `https://SEUNOME.atlassian.net`.
+ *   2. `StoredProvider` — Basic da conexão salva no /config (tabela
+ *      `jira_connections`), com fallback p/ Basic via env.
+ * Basic é o único modo suportado: em instância corporativa (ex.: Indeed) o
+ * OAuth 3LO é bloqueado da Agile API (/rest/agile), então boards/sprints só
+ * vêm por Basic. Docs: https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/
  *
  * Nada aqui vai para o frontend (usa fetch server-side + segredos).
  */
-import {
-  getJiraConnection,
-  saveJiraConnection,
-  type JiraConnection,
-} from "./jira-connections";
+import { getJiraConnection } from "./jira-connections";
 
 export interface JiraConfig {
   baseUrl: string; // https://SEUNOME.atlassian.net
@@ -44,7 +41,7 @@ export function jiraConfigFromEnv(): JiraConfig {
 /**
  * Superfície de rede da Jira — os 11 métodos que scripts/sync usam. `raw` é
  * load-bearing (toda chamada Agile/admin passa por ele). Implementado por
- * `JiraClient` (Basic) e `OAuthProvider` (3LO).
+ * `JiraClient` e `StoredProvider` (ambos Basic).
  */
 export interface JiraProvider {
   raw<T = any>(method: string, path: string, body?: unknown): Promise<T>;
@@ -68,8 +65,7 @@ export interface JiraProvider {
 
 /**
  * Lógica de request compartilhada — UM lugar só. Parametrizada por `getBase`,
- * que resolve (a) a URL base e (b) o header Authorization a cada chamada
- * (necessário para o OAuth, que pode renovar o token antes de cada request).
+ * que resolve (a) a URL base e (b) o header Authorization a cada chamada.
  */
 async function jiraRequest<T>(
   getBase: () => Promise<{ baseUrl: string; authHeader: string }>,
@@ -247,25 +243,16 @@ const basicHeader = (email: string, token: string) =>
   "Basic " + Buffer.from(`${email}:${token}`).toString("base64");
 
 /**
- * Provider da conexão ARMAZENADA (`jira_connections`, do /config). Suporta:
+ * Provider da conexão ARMAZENADA (`jira_connections`, do /config). Basic:
  *   • Basic (email + API token) — form do /config, acesso pleno (Agile API).
- *   • OAuth 2.0 (3LO) — com auto-refresh do access_token.
  *   • Fallback: Basic via env (JIRA_BASE_URL/EMAIL/API_TOKEN) p/ dev/scripts.
  * Resolvido por-request (construção é síncrona).
  */
 export class StoredProvider extends JiraBase implements JiraProvider {
-  // Dedupe de refresh OAuth concorrente (refresh_token rotaciona a cada uso).
-  private static refreshing: Promise<JiraConnection> | null = null;
-  private cached: JiraConnection | null = null;
-
   protected async getBase(): Promise<{ baseUrl: string; authHeader: string }> {
     const conn = await getJiraConnection();
-    if (conn?.auth_type === "basic" && conn.basic_email && conn.basic_token) {
+    if (conn?.basic_email && conn.basic_token) {
       return { baseUrl: conn.site_url.replace(/\/$/, ""), authHeader: basicHeader(conn.basic_email, conn.basic_token) };
-    }
-    if (conn?.auth_type === "oauth" && conn.cloud_id && conn.access_token) {
-      const fresh = await this.ensureFreshOAuth(conn);
-      return { baseUrl: `https://api.atlassian.com/ex/jira/${fresh.cloud_id}`, authHeader: `Bearer ${fresh.access_token}` };
     }
     // fallback env Basic
     const { JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN } = process.env;
@@ -274,81 +261,14 @@ export class StoredProvider extends JiraBase implements JiraProvider {
     }
     throw new Error("Jira não conectado — conecte em /config");
   }
-
-  private freshOAuth(conn: JiraConnection): boolean {
-    if (!conn.expires_at) return false;
-    const expMs = Date.parse(conn.expires_at);
-    return Number.isFinite(expMs) && expMs - Date.now() > 60_000;
-  }
-
-  private async ensureFreshOAuth(conn: JiraConnection): Promise<JiraConnection> {
-    if (this.cached && this.freshOAuth(this.cached)) return this.cached;
-    if (this.freshOAuth(conn)) {
-      this.cached = conn;
-      return conn;
-    }
-    if (!StoredProvider.refreshing) {
-      StoredProvider.refreshing = this.refresh(conn).finally(() => {
-        StoredProvider.refreshing = null;
-      });
-    }
-    this.cached = await StoredProvider.refreshing;
-    return this.cached;
-  }
-
-  private async refresh(conn: JiraConnection): Promise<JiraConnection> {
-    const clientId = process.env.JIRA_OAUTH_CLIENT_ID;
-    const clientSecret = process.env.JIRA_OAUTH_CLIENT_SECRET;
-    if (!clientId || !clientSecret) {
-      throw new Error(
-        "JIRA_OAUTH_CLIENT_ID e JIRA_OAUTH_CLIENT_SECRET são obrigatórias para renovar o token."
-      );
-    }
-    if (!conn.refresh_token) {
-      throw new Error("Sem refresh_token — reconecte em /api/jira/connect");
-    }
-    const res = await fetch("https://auth.atlassian.com/oauth/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        grant_type: "refresh_token",
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: conn.refresh_token,
-      }),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Jira OAuth refresh → ${res.status}: ${text.slice(0, 500)}`);
-    }
-    const data = (await res.json()) as {
-      access_token: string;
-      refresh_token?: string;
-      expires_in: number;
-      scope?: string;
-    };
-    const updated: JiraConnection = {
-      ...conn,
-      access_token: data.access_token,
-      // a Atlassian rotaciona o refresh_token; se vier um novo, guarda-o.
-      refresh_token: data.refresh_token ?? conn.refresh_token,
-      expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
-      scopes: data.scope ?? conn.scopes,
-    };
-    await saveJiraConnection(updated);
-    return updated;
-  }
 }
 
 /**
- * Factory (uso futuro): OAuth quando `JIRA_OAUTH_CLIENT_ID` está setado, senão
- * o cliente Basic. NÃO é usado por scripts/sync — esses seguem com
- * `new JiraClient(jiraConfigFromEnv())`. A conexão do OAuth é resolvida
- * preguiçosamente por request (construção é síncrona).
+ * Factory: conexão Basic do /config (resolvida por-request pelo StoredProvider),
+ * com fallback p/ Basic via env (dev/scripts). NÃO é usado por scripts/sync —
+ * esses seguem com `new JiraClient(jiraConfigFromEnv())`.
  */
 export function jiraProviderFromEnv(): JiraProvider {
-  // A conexão do /config (Basic do form OU OAuth) é resolvida por-request pelo
-  // StoredProvider, com fallback p/ Basic via env (dev/scripts).
   return new StoredProvider();
 }
 

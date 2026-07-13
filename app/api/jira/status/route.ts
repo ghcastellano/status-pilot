@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/jira/status — estado da conexão OAuth com o Jira.
+ * GET /api/jira/status — estado da conexão (Basic) com o Jira.
  * Nunca lança para o cliente: em qualquer erro devolve { connected: false }.
  */
 export async function GET() {

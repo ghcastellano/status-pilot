@@ -28,7 +28,7 @@ export interface SyncResult {
 }
 
 export async function syncIssuesFromJira(): Promise<SyncResult> {
-  // OAuth 2.0 quando configurado (JIRA_OAUTH_CLIENT_ID), senão Basic token.
+  // Conexão Basic do /config (por empresa), com fallback p/ Basic via env.
   const jira = jiraProviderFromEnv();
   const sb = getSupabaseAdmin();
 
