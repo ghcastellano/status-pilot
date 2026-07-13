@@ -97,13 +97,13 @@ export async function GET(req: NextRequest) {
       account_name: accountName ?? site.name ?? null,
     });
 
-    const ok = NextResponse.redirect(new URL("/?jira=connected", origin));
+    const ok = NextResponse.redirect(new URL("/config?jira=connected", origin));
     ok.cookies.delete("jira_oauth_state");
     return ok;
   } catch (e) {
     // loga server-side; NÃO joga o detalhe do erro na URL (histórico/logs/Referer)
     console.error("jira oauth callback falhou:", (e as Error).message);
-    const fail = NextResponse.redirect(new URL("/?jira=error", origin));
+    const fail = NextResponse.redirect(new URL("/config?jira=error", origin));
     fail.cookies.delete("jira_oauth_state");
     return fail;
   }
