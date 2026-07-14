@@ -10,15 +10,12 @@
  */
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useLang } from "@/components/lang-context";
 import { metricLabel } from "@/lib/i18n";
-import { buildChartInsights } from "@/lib/chart-insights";
-import { CycleScatter, VelocityBar, ThroughputBar } from "@/components/charts";
-import { CFDChart, AgingScatter, CycleHistogram } from "@/components/charts-advanced";
 import { MaturityHistoryChart, type MaturityWeek } from "@/components/charts-maturity";
 import {
   type MaturityResult,
@@ -318,52 +315,10 @@ function PillarSection({ pillar, team, mat, m }: { pillar: Pillar; team: Dashboa
   const info = PILLAR_INFO[pillar];
   const rows = mat.metrics.filter((mt) => mt.pillar === pillar);
   const weakest = new Set(mat.weakest);
-  const isScrum = team.board_type === "scrum";
-  const adv = m.advanced;
-  const stageOrder: string[] = adv.cfd.stages.map((s: any) => s.jira);
-  const { lang } = useLang();
-  const ci = buildChartInsights(m, lang);
 
-  // gráficos por pilar × método (reuso dos componentes existentes)
-  const charts: React.ReactNode[] = [];
-  if (pillar === "flow") {
-    if (isScrum && m.scrum) {
-      charts.push(
-        <ChartCard key="vel" title="Velocity por sprint" hint="Contexto — quanto o time entrega por sprint (não entra no tier)" note={ci.velocity}>
-          <VelocityBar data={m.scrum.velocity} />
-        </ChartCard>
-      );
-    } else {
-      charts.push(
-        <ChartCard key="tp" title="Throughput por semana" hint="Contexto — itens entregues por semana (não entra no tier)" note={ci.throughput}>
-          <ThroughputBar series={m.flow.throughput.series} />
-        </ChartCard>
-      );
-    }
-    charts.push(
-      <ChartCard key="cyc" title="Cycle time — distribuição (p50/p85)" hint="Previsibilidade da entrega → Cycle time (p85), em dias" note={ci.cycle}>
-        <CycleScatter data={m.flow.scatter} p50={m.flow.deliveryCycleTime.median} p85={m.flow.deliveryCycleTime.p85} />
-      </ChartCard>
-    );
-  } else {
-    // quality
-    if (!isScrum) {
-      charts.push(
-        <ChartCard key="cfd" title="Cumulative Flow Diagram" hint="Acúmulo por estágio → gargalos de fluxo" note={ci.cfd}>
-          <CFDChart stages={adv.cfd.stages} points={adv.cfd.points} />
-        </ChartCard>
-      );
-    }
-    charts.push(
-      <ChartCard key="aging" title="Work item aging" hint="Itens parados além do normal → Itens parados (aging)" note={ci.aging}>
-        <AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} />
-      </ChartCard>,
-      <ChartCard key="hist" title="Histograma de cycle time" hint="Contexto — dispersão do tempo de entrega (em dias)" note={ci.histogram}>
-        <CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} />
-      </ChartCard>
-    );
-  }
-
+  // Sem gráficos aqui: a maturidade mostra os DRIVERS do tier (cards com meta);
+  // as evidências visuais (velocity, cycle, aging, CFD…) vivem em "Métricas
+  // avançadas" no topo — evita repetir o mesmo gráfico em dois lugares.
   return (
     <Card>
       <CardHeader>
@@ -372,15 +327,12 @@ function PillarSection({ pillar, team, mat, m }: { pillar: Pillar; team: Dashboa
         </CardTitle>
         <p className="text-sm text-muted-foreground">{info.question}</p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* métricas do pilar com tier + meta */}
+      <CardContent>
         <div className="grid gap-2 sm:grid-cols-2">
           {rows.map((mt) => (
             <PillarMetric key={mt.key} mt={mt} isWeak={weakest.has(mt.key)} />
           ))}
         </div>
-        {/* gráficos reutilizados */}
-        <div className="grid gap-4 lg:grid-cols-2">{charts}</div>
       </CardContent>
     </Card>
   );
@@ -406,22 +358,6 @@ function PillarMetric({ mt, isWeak }: { mt: MetricEval; isWeak: boolean }) {
           <Badge variant="secondary" className="text-[9px]">—</Badge>
         )}
       </div>
-    </div>
-  );
-}
-
-function ChartCard({ title, hint, note, children }: { title: string; hint: string; note?: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border p-3">
-      <p className="text-sm font-medium">{title}</p>
-      <p className="mb-2 text-xs text-muted-foreground">{hint}</p>
-      {children}
-      {note && (
-        <p className="mt-2 flex items-start gap-1.5 border-t border-border/60 pt-2 text-[11px] leading-snug text-foreground/80">
-          <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
-          <span>{note}</span>
-        </p>
-      )}
     </div>
   );
 }

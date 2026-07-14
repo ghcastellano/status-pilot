@@ -49,7 +49,6 @@ export default function DashboardPage() {
   const [insights, setInsights] = React.useState<any>(null);
   const [insightLoading, setInsightLoading] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
-  const [showDetailed, setShowDetailed] = React.useState(false);
   const [mat, setMat] = React.useState<DashboardMaturityData | null>(null);
   const autoSyncedRef = React.useRef<Set<string>>(new Set());
 
@@ -135,10 +134,15 @@ export default function DashboardPage() {
     setSyncing(true);
     setSyncMsg(null);
     try {
-      const res = await fetch("/api/sync", { method: "POST" });
+      // Sincroniza SÓ o time atual (mais barato; não puxa todos os boards).
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(selectedTeam ? { teamId: selectedTeam.id } : {}),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Falha no sync");
-      setSyncMsg(`${data.total} itens sincronizados do Jira`);
+      setSyncMsg(t(`${data.total} itens sincronizados`, `${data.total} items synced`));
       setRefresh((x) => x + 1);
     } catch (e) {
       setSyncMsg((e as Error).message);
@@ -252,63 +256,54 @@ export default function DashboardPage() {
       </div>
       {syncMsg && <p className="text-xs text-primary">{syncMsg}</p>}
 
-      {/* ── Seção de Maturidade: nível + referência + 3 pilares (não filtrável) ── */}
-      {mat ? (
-        <DashboardMaturity data={mat} />
-      ) : (
-        <div className="space-y-4">
-          <div className="h-64 animate-pulse rounded-xl bg-muted" />
-          <div className="h-48 animate-pulse rounded-xl bg-muted" />
-        </div>
-      )}
-
-      {/* ── Explorar métricas detalhadas (com filtros) — recolhível ── */}
-      <button
-        onClick={() => setShowDetailed((v) => !v)}
-        className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ChevronDown className={`h-4 w-4 transition-transform ${showDetailed ? "rotate-180" : ""}`} />
-        Explorar métricas detalhadas (com filtros) {showDetailed ? "" : "— mostrar"}
-      </button>
-      {showDetailed && (
-        <>
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Sparkles className="h-3.5 w-3.5 text-primary" />
-        {insightLoading ? t("IA interpretando cada métrica…", "AI reading each metric…") : t("Leitura automática da IA em cada métrica", "Automatic AI reading of each metric")}
-      </div>
-
-      {/* 4 KPIs principais — cada um com a interpretação da IA */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard accent label={t("Cycle time", "Cycle time")} value={f.deliveryCycleTime.median} unit="d" sub={t(`méd ${f.deliveryCycleTime.mean}d · med ${f.deliveryCycleTime.median}d · p85 ${f.deliveryCycleTime.p85}d`, `mean ${f.deliveryCycleTime.mean}d · median ${f.deliveryCycleTime.median}d · p85 ${f.deliveryCycleTime.p85}d`)} insight={insights?.cycleTime} />
-        {isScrum ? (
-          <KpiCard label={t("Velocity", "Velocity")} value={m.scrum?.avgVelocity ?? 0} unit="pts" sub={`σ ${m.scrum?.velocityStdev ?? 0}`} insight={insights?.secondary} />
-        ) : (
-          <KpiCard label={t("Throughput", "Throughput")} value={f.throughput.perWeekAvg} unit="/sem" sub={t("itens concluídos", "items done")} insight={insights?.secondary} />
-        )}
-        <KpiCard label={t("Eficiência de fluxo", "Flow efficiency")} value={Math.round(f.flowEfficiency * 100)} unit="%" sub={t("ativo ÷ total", "active ÷ total")} insight={insights?.flowEfficiency} />
-        {isScrum ? (
-          <KpiCard label={t("Taxa de Acerto do Sprint", "Sprint Hit Rate")} value={Math.round((m.scrum?.sayDoRatioAvg ?? 0) * 100)} unit="%" sub={t("entregue ÷ combinado", "delivered ÷ committed")} insight={insights?.predictability} />
-        ) : (
-          <KpiCard label={t("Previsibilidade", "Predictability")} value={f.deliveryCycleTime.p85} unit="d" sub={`SLE: 85% ≤ ${f.deliveryCycleTime.p85}d`} insight={insights?.predictability} />
-        )}
-      </div>
-
-      {/* 1 gráfico principal + leitura da IA */}
-      <Card>
-        <CardHeader><CardTitle>{t("Cycle time — distribuição e tendência", "Cycle time — distribution & trend")}</CardTitle></CardHeader>
-        <CardContent>
-          <CycleScatter data={f.scatter} p50={f.deliveryCycleTime.median} p85={f.deliveryCycleTime.p85} />
-          <ChartNote text={ci.cycle} />
-          {insights?.chart && (
-            <p className="mt-3 flex items-start gap-1.5 border-t border-border/60 pt-3 text-xs leading-snug text-foreground/80">
-              <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
-              <span>{insights.chart}</span>
-            </p>
+      {/* ═══ BLOCO 1 — MÉTRICAS DO TIME (o que está acontecendo) ═══ */}
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold tracking-tight">{t("Métricas do time", "Team metrics")}</h2>
+          {m.window?.label && (
+            <span className="rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-xs text-muted-foreground">
+              {t("Período", "Window")}: {lang === "en" ? (m.window.labelEn ?? m.window.label) : m.window.label}
+            </span>
           )}
-        </CardContent>
-      </Card>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          {insightLoading ? t("IA interpretando cada métrica…", "AI reading each metric…") : t("Leitura automática da IA em cada métrica", "Automatic AI reading of each metric")}
+        </div>
 
-      {/* Métricas avançadas — secundário, recolhível */}
+        {/* 4 KPIs principais — cada um com a interpretação da IA */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard accent label={t("Cycle time", "Cycle time")} value={f.deliveryCycleTime.median} unit="d" sub={t(`méd ${f.deliveryCycleTime.mean}d · med ${f.deliveryCycleTime.median}d · p85 ${f.deliveryCycleTime.p85}d`, `mean ${f.deliveryCycleTime.mean}d · median ${f.deliveryCycleTime.median}d · p85 ${f.deliveryCycleTime.p85}d`)} insight={insights?.cycleTime} />
+          {isScrum ? (
+            <KpiCard label={t("Velocity", "Velocity")} value={m.scrum?.avgVelocity ?? 0} unit="pts" sub={`σ ${m.scrum?.velocityStdev ?? 0}`} insight={insights?.secondary} />
+          ) : (
+            <KpiCard label={t("Throughput", "Throughput")} value={f.throughput.perWeekAvg} unit="/sem" sub={t("itens concluídos", "items done")} insight={insights?.secondary} />
+          )}
+          <KpiCard label={t("Eficiência de fluxo", "Flow efficiency")} value={Math.round(f.flowEfficiency * 100)} unit="%" sub={t("ativo ÷ total", "active ÷ total")} insight={insights?.flowEfficiency} />
+          {isScrum ? (
+            <KpiCard label={t("Taxa de Acerto do Sprint", "Sprint Hit Rate")} value={Math.round((m.scrum?.sayDoRatioAvg ?? 0) * 100)} unit="%" sub={t("entregue ÷ combinado", "delivered ÷ committed")} insight={insights?.predictability} />
+          ) : (
+            <KpiCard label={t("Previsibilidade", "Predictability")} value={f.deliveryCycleTime.p85} unit="d" sub={`SLE: 85% ≤ ${f.deliveryCycleTime.p85}d`} insight={insights?.predictability} />
+          )}
+        </div>
+
+        {/* Gráfico principal — cycle time (distribuição + tendência) */}
+        <Card>
+          <CardHeader><CardTitle>{t("Cycle time — distribuição e tendência", "Cycle time — distribution & trend")}</CardTitle></CardHeader>
+          <CardContent>
+            <CycleScatter data={f.scatter} p50={f.deliveryCycleTime.median} p85={f.deliveryCycleTime.p85} />
+            <ChartNote text={ci.cycle} />
+            {insights?.chart && (
+              <p className="mt-3 flex items-start gap-1.5 border-t border-border/60 pt-3 text-xs leading-snug text-foreground/80">
+                <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+                <span>{insights.chart}</span>
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ═══ BLOCO 2 — MÉTRICAS AVANÇADAS (aprofundar — recolhido) ═══ */}
       <div>
         <button
           onClick={() => setShowAdvanced((v) => !v)}
@@ -321,36 +316,29 @@ export default function DashboardPage() {
         {showAdvanced && (
           <div className="mt-4 space-y-4">
             {isScrum && m.scrum ? (
-              /* ── SCRUM: velocity + burndown em primeiro plano ─── */
+              /* ── SCRUM: cada gráfico UMA vez ── */
               <section className="grid gap-4 lg:grid-cols-2">
                 <Card>
                   <CardHeader><CardTitle>{t("Velocity por sprint", "Velocity by sprint")}</CardTitle></CardHeader>
                   <CardContent><VelocityBar data={m.scrum.velocity} /><ChartNote text={ci.velocity} /></CardContent>
                 </Card>
-                {m.scrum.currentSprint ? (
+                {m.scrum.currentSprint && (
                   <Card>
                     <CardHeader><CardTitle>{t("Sprint burndown", "Sprint burndown")} — {m.scrum.currentSprint.name}</CardTitle></CardHeader>
                     <CardContent><BurndownLine data={m.scrum.burndown} /><ChartNote text={ci.burndown} /></CardContent>
-                  </Card>
-                ) : (
-                  <Card>
-                    <CardHeader><CardTitle>{t("Cycle time — histograma", "Cycle time histogram")}</CardTitle></CardHeader>
-                    <CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /><ChartNote text={ci.histogram} /></CardContent>
                   </Card>
                 )}
                 <Card>
                   <CardHeader><CardTitle>{t("Envelhecimento de itens (aging)", "Work item aging")}</CardTitle></CardHeader>
                   <CardContent><AgingScatter points={adv.aging.points} stageOrder={stageOrder} p50={adv.aging.p50} p85={adv.aging.p85} /><ChartNote text={ci.aging} /></CardContent>
                 </Card>
-                {m.scrum.currentSprint && (
-                  <Card>
-                    <CardHeader><CardTitle>{t("Cycle time — histograma", "Cycle time histogram")}</CardTitle></CardHeader>
-                    <CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /><ChartNote text={ci.histogram} /></CardContent>
-                  </Card>
-                )}
+                <Card>
+                  <CardHeader><CardTitle>{t("Cycle time — histograma", "Cycle time histogram")}</CardTitle></CardHeader>
+                  <CardContent><CycleHistogram buckets={adv.histogram.buckets} p50={adv.histogram.p50} p85={adv.histogram.p85} p95={adv.histogram.p95} /><ChartNote text={ci.histogram} /></CardContent>
+                </Card>
               </section>
             ) : (
-              /* ── KANBAN: CFD + WIP/throughput em primeiro plano ─ */
+              /* ── KANBAN: cada gráfico UMA vez ── */
               <>
                 <Card>
                   <CardHeader><CardTitle>{t("Diagrama de Fluxo Cumulativo (CFD)", "Cumulative Flow Diagram (CFD)")}</CardTitle></CardHeader>
@@ -367,7 +355,15 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
-        </>
+
+      {/* ═══ BLOCO 3 — MATURIDADE DO TIME (o veredito — por último) ═══ */}
+      {mat ? (
+        <DashboardMaturity data={mat} />
+      ) : (
+        <div className="space-y-4">
+          <div className="h-64 animate-pulse rounded-xl bg-muted" />
+          <div className="h-48 animate-pulse rounded-xl bg-muted" />
+        </div>
       )}
     </div>
   );
