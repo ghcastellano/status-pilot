@@ -11,6 +11,7 @@
 import type { JiraProvider, JiraIssue } from "./jira";
 import { getSupabaseAdmin } from "./supabase";
 import type { IssueRow, SprintRow, StageStamp, IssueType, IssueStatus, TeamRow } from "./metrics";
+import { storeMaturityHistory } from "./maturity-history";
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -365,9 +366,19 @@ export async function ingestBoard(jira: JiraProvider, team: TeamRow): Promise<nu
   }
   // Board da Agile (id numérico) tem tipo REAL — respeita. Projeto v3 (id = key) → detecta.
   const fromAgileBoard = /^\d+$/.test(team.jira_board_id ?? "");
+  const effectiveType = fromAgileBoard ? team.board_type : detectedType;
   if (!fromAgileBoard && detectedType !== team.board_type) {
     await sb.from("teams").update({ board_type: detectedType }).eq("id", team.id);
   }
   await sb.from("qa_cache").delete().eq("team_id", team.id);
+
+  // Análise RETROATIVA da maturidade → metrics_history (dashboard lê do banco,
+  // sem consultar a API toda hora). Por sprint fechado (scrum) / semana (kanban).
+  try {
+    await storeMaturityHistory(sb, { ...team, board_type: effectiveType }, sprintRows, issueRows);
+  } catch (e) {
+    // não falha a ingestão por causa do histórico
+    console.error(`metrics_history ${team.id}:`, (e as Error).message);
+  }
   return issueRows.length;
 }

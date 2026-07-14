@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTeamData } from "@/lib/data";
 import { computeTeamMetrics } from "@/lib/metrics";
+import { resolveWindow } from "@/lib/window";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,15 +18,28 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Time não encontrado" }, { status: 404 });
     }
     const epicNames = Object.fromEntries(epics.map((e) => [e.epic_key, e.name]));
-    const weeks = Math.min(26, Math.max(4, Number(p.get("weeks")) || 12));
+    // MESMA janela da maturidade (/api/coaching/team) → KPIs e tier consistentes.
+    const win = resolveWindow(team, sprints, { sprintIds: p.get("sprintIds"), weeks: p.get("weeks") });
     const metrics = computeTeamMetrics(team, sprints, issues, {
       epic: p.get("epic"),
       type: p.get("type"),
-      weeks,
+      weeks: win.cycleWeeks ?? 12,
       epicNames,
-      sprintId: p.get("sprintId"),
+      sprintIds: win.sprintIds,
+      cycleWeeks: win.cycleWeeks,
     });
-    return NextResponse.json(metrics);
+    return NextResponse.json({
+      ...metrics,
+      window: {
+        mode: team.board_type,
+        sprintIds: win.sprintIds ?? [],
+        cycleWeeks: win.cycleWeeks ?? null,
+        label: win.label,
+        labelEn: win.labelEn,
+        availableSprints: win.availableSprints,
+        activeSprintSelected: win.activeSprintSelected,
+      },
+    });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

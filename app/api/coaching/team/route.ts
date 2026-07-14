@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchTeamData } from "@/lib/data";
 import { computeTeamMetrics } from "@/lib/metrics";
 import { computeMaturity } from "@/lib/maturity";
+import { resolveWindow } from "@/lib/window";
 import { fetchHistory, fetchPlan, fetchAssessment, fetchExperiments, fetchCommentsForTeam, fetchFieldHistory } from "@/lib/coaching-db";
 import { classifyEngagement } from "@/lib/coaching";
 
@@ -30,36 +31,25 @@ export async function GET(req: NextRequest) {
     ]);
     const epicNames = Object.fromEntries(epics.map((e) => [e.epic_key, e.name]));
 
-    // Janela de maturidade: Scrum = últimas 6 sprints (ou ?sprintIds=csv);
-    // Kanban = rolling ?weeks= (4/8/12, default 8).
-    const teamSprints = sprints
-      .filter((s) => s.team_id === team.id)
-      .sort((a, b) => (a.start_date < b.start_date ? -1 : 1));
-    let sprintIds: string[] | undefined;
-    let cycleWeeks: number | undefined;
-    const availableSprints = teamSprints.map((s) => ({ id: s.id, name: s.name, state: s.state }));
-    if (team.board_type === "scrum") {
-      const q = req.nextUrl.searchParams.get("sprintIds");
-      const picked = q ? q.split(",").map((s) => s.trim()).filter(Boolean) : null;
-      const closedIds = teamSprints.filter((s) => s.state === "closed").map((s) => s.id);
-      // sem sprints fechadas ainda (board novo) → usa as disponíveis, p/ a janela
-      // exibida bater com os dados (senão o UI diz "6 sprints" e a métrica usa tudo).
-      const base = closedIds.length ? closedIds : teamSprints.map((s) => s.id);
-      sprintIds = picked && picked.length ? picked : base.slice(-6);
-    } else {
-      const w = Number(req.nextUrl.searchParams.get("weeks"));
-      cycleWeeks = [4, 8, 12].includes(w) ? w : 8;
-    }
+    // Janela ÚNICA (mesma do /api/metrics) → tier e KPIs consistentes.
+    const win = resolveWindow(team, sprints, {
+      sprintIds: req.nextUrl.searchParams.get("sprintIds"),
+      weeks: req.nextUrl.searchParams.get("weeks"),
+    });
+    const sprintIds = win.sprintIds;
+    const cycleWeeks = win.cycleWeeks;
+    const availableSprints = win.availableSprints;
     const metrics = computeTeamMetrics(team, sprints, issues, {
       weeks: cycleWeeks ?? 12,
       epicNames,
       sprintIds,
       cycleWeeks,
     });
-    const maturity = computeMaturity(metrics);
+    // Só o sprint ATIVO selecionado → métricas atuais, SEM maturidade (não fechou).
+    const maturity = win.activeSprintSelected ? null : computeMaturity(metrics);
     const coaching = plan ? plan.coaching : true;
     const status = classifyEngagement({
-      tier: maturity.tier,
+      tier: maturity?.tier ?? null,
       historyTiers: history.map((h) => h.tier),
       coaching,
     });
@@ -75,7 +65,10 @@ export async function GET(req: NextRequest) {
         mode: team.board_type,
         sprintIds: sprintIds ?? [],
         cycleWeeks: cycleWeeks ?? null,
+        label: win.label,
+        labelEn: win.labelEn,
         availableSprints,
+        activeSprintSelected: win.activeSprintSelected,
       },
       status,
       coach: plan?.coach ?? null,
