@@ -75,14 +75,17 @@ export default function DashboardPage() {
     if (!selectedTeam) return;
     let active = true;
     setMat(null);
-    fetch(`/api/coaching/team?teamId=${selectedTeam.id}`, { cache: "no-store" })
+    // Mesma janela do dashboard (sprint/weeks) → tier e KPIs consistentes.
+    const cq = new URLSearchParams({ teamId: selectedTeam.id, weeks });
+    if (sprint !== "all") cq.set("sprintIds", sprint);
+    fetch(`/api/coaching/team?${cq}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d: DashboardMaturityData) => active && setMat(d))
       .catch(() => active && setMat(null));
     return () => {
       active = false;
     };
-  }, [selectedTeam?.id, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedTeam?.id, refresh, sprint, weeks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (!selectedTeam) return;
@@ -91,7 +94,7 @@ export default function DashboardPage() {
     const qs = new URLSearchParams({ teamId: selectedTeam.id, weeks });
     if (epic !== "all") qs.set("epic", epic);
     if (type !== "all") qs.set("type", type);
-    if (sprint !== "all") qs.set("sprintId", sprint);
+    if (sprint !== "all") qs.set("sprintIds", sprint); // janela = sprint(s) selecionado(s)
     fetch(`/api/metrics?${qs}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : r.json().then((e) => Promise.reject(new Error(e.error)))))
       .then((d) => {
@@ -227,12 +230,13 @@ export default function DashboardPage() {
           </Select>
           {isScrum ? (
             <Select value={sprint} onValueChange={setSprint}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="Sprint" /></SelectTrigger>
+              <SelectTrigger className="w-52"><SelectValue placeholder="Sprint" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os sprints</SelectItem>
-                {(m.scrum?.sprints ?? []).map((s: { id: string; name: string; state: string }) => (
+                <SelectItem value="all">{t("Últimas 6 sprints fechadas", "Last 6 closed sprints")}</SelectItem>
+                {/* Só fechados + ativo (futuros ficam fora). Ativo = métricas atuais, sem maturidade. */}
+                {(m.window?.availableSprints ?? []).slice().reverse().map((s: { id: string; name: string; state: string }) => (
                   <SelectItem key={s.id} value={s.id}>
-                    {s.name}{s.state === "active" ? " ●" : ""}
+                    {s.name}{s.state === "active" ? ` ● ${t("ativo · sem maturidade", "active · no maturity")}` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -357,13 +361,25 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ BLOCO 3 — MATURIDADE DO TIME (o veredito — por último) ═══ */}
-      {mat ? (
-        <DashboardMaturity data={mat} />
-      ) : (
+      {!mat ? (
         <div className="space-y-4">
           <div className="h-64 animate-pulse rounded-xl bg-muted" />
           <div className="h-48 animate-pulse rounded-xl bg-muted" />
         </div>
+      ) : (mat as any).maturity == null ? (
+        <Card>
+          <CardHeader><CardTitle>{t("Maturidade do time", "Team maturity")}</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              {t(
+                "Sprint ativo selecionado — a maturidade não é avaliada porque o sprint ainda não fechou. Acima você vê as métricas atuais em tempo real. Selecione “Últimas 6 sprints fechadas” para ver a maturidade.",
+                "Active sprint selected — maturity isn't evaluated because the sprint hasn't closed yet. Above are the current live metrics. Pick “Last 6 closed sprints” to see maturity."
+              )}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <DashboardMaturity data={mat} />
       )}
     </div>
   );
