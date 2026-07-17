@@ -40,7 +40,7 @@ export interface MaturityWindow {
 
 export interface DashboardMaturityData {
   team: { id: string; name: string; board_type: "scrum" | "kanban"; description: string | null };
-  maturity: MaturityResult;
+  maturity: MaturityResult | null;
   metrics: any; // TeamMetrics completo
   history: MaturityWeek[];
   assessment: { signals: Record<string, string>; note: string | null } | null;
@@ -60,99 +60,19 @@ const TIER_COL_BG: Record<TierToken, string> = {
 };
 
 export function DashboardMaturity({ data: initial }: { data: DashboardMaturityData }) {
-  const [data, setData] = React.useState(initial);
-  const [loading, setLoading] = React.useState(false);
-  // troca de time (prop nova) reseta a janela
-  React.useEffect(() => setData(initial), [initial]);
+  const { team, maturity: mat, metrics: m, history, assessment } = initial;
 
-  const { team, maturity: mat, metrics: m, history, assessment, window: win } = data;
-
-  const applyWindow = React.useCallback(
-    async (qs: string) => {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/coaching/team?teamId=${team.id}${qs}`, { cache: "no-store" }).then((r) => r.json());
-        if (res && !res.error) setData(res);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [team.id]
-  );
+  // O sprint/período é controlado pelo filtro único do Dashboard. A API de
+  // métricas e a API de maturidade recebem a mesma janela no componente pai.
+  if (!mat) return null;
 
   return (
     <div className="space-y-4">
-      {win && <MaturityWindowBar win={win} loading={loading} onApply={applyWindow} />}
       <MaturityLevelPanel team={team} mat={mat} m={m} history={history} />
       <ReferencePanel boardType={team.board_type} />
       <PillarSection pillar="flow" team={team} mat={mat} m={m} />
       <PillarSection pillar="quality" team={team} mat={mat} m={m} />
       <OwnershipPillar team={team} tier={mat.tier} assessment={assessment} />
-    </div>
-  );
-}
-
-// Seletor de janela: Kanban = período (4/8/12 sem); Scrum = sprints (últimas 6 / seleção).
-function MaturityWindowBar({ win, loading, onApply }: { win: MaturityWindow; loading: boolean; onApply: (qs: string) => void }) {
-  if (win.mode === "kanban") {
-    const cur = win.cycleWeeks ?? 8;
-    return (
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-muted-foreground">Janela de avaliação:</span>
-        {[4, 8, 12].map((w) => (
-          <button
-            key={w}
-            disabled={loading}
-            onClick={() => onApply(`&weeks=${w}`)}
-            className={cn(
-              "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-              cur === w ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"
-            )}
-          >
-            {w} semanas
-          </button>
-        ))}
-        {loading && <span className="text-xs text-muted-foreground">atualizando…</span>}
-      </div>
-    );
-  }
-  const sel = new Set(win.sprintIds);
-  const sprints = win.availableSprints.slice(-12).reverse(); // mais recentes primeiro
-  const toggle = (id: string) => {
-    const next = new Set(sel);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onApply(`&sprintIds=${Array.from(next).join(",")}`);
-  };
-  const last6 = () => {
-    const closed = win.availableSprints.filter((s) => s.state === "closed");
-    onApply(`&sprintIds=${closed.slice(-6).map((s) => s.id).join(",")}`);
-  };
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 text-sm">
-      <span className="mr-1 text-muted-foreground">Sprints:</span>
-      <button
-        disabled={loading}
-        onClick={last6}
-        className="rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
-      >
-        Últimas 6
-      </button>
-      {sprints.map((s) => (
-        <button
-          key={s.id}
-          disabled={loading}
-          onClick={() => toggle(s.id)}
-          className={cn(
-            "rounded-md border px-2 py-1 text-xs transition-colors disabled:opacity-50",
-            sel.has(s.id) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"
-          )}
-        >
-          {s.name}
-          {s.state === "active" ? " ●" : ""}
-        </button>
-      ))}
-      {loading && <span className="text-xs text-muted-foreground">atualizando…</span>}
     </div>
   );
 }

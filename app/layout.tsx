@@ -4,7 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TeamProvider } from "@/components/team-context";
 import { LangProvider } from "@/components/lang-context";
-import { Sidebar } from "@/components/sidebar";
+import { MobileNav, Sidebar } from "@/components/sidebar";
 import { TeamSelector } from "@/components/team-selector";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LangToggle } from "@/components/lang-toggle";
@@ -46,8 +46,9 @@ export default function RootLayout({
                       <ThemeToggle />
                     </div>
                   </header>
-                  <main className="flex-1 p-4 md:p-8">{children}</main>
+                  <main className="flex-1 p-4 pb-20 md:p-8">{children}</main>
                 </div>
+                <MobileNav />
               </div>
             </TeamProvider>
           </LangProvider>

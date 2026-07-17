@@ -6,12 +6,15 @@ import { LayoutDashboard, MessageSquareText, FileText, Plane, Trophy, Settings }
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/config", label: "Configurar Jira", icon: Settings },
-  { href: "/coaching", label: "Coaching", icon: Trophy },
-  { href: "/ask", label: "Perguntar", icon: MessageSquareText },
-  { href: "/report", label: "Status Report", icon: FileText },
+  { href: "/", label: "Dashboard", mobileLabel: "Dashboard", icon: LayoutDashboard },
+  { href: "/config", label: "Configurar Jira", mobileLabel: "Jira", icon: Settings },
+  { href: "/coaching", label: "Coaching", mobileLabel: "Coaching", icon: Trophy },
+  { href: "/ask", label: "Perguntar", mobileLabel: "Perguntar", icon: MessageSquareText },
+  { href: "/report", label: "Status Report", mobileLabel: "Report", icon: FileText },
 ];
+
+const isActive = (pathname: string, href: string) =>
+  href === "/" ? pathname === href : pathname.startsWith(href);
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -28,7 +31,7 @@ export function Sidebar() {
       </div>
       <nav className="flex-1 space-y-1 p-3">
         {NAV.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href;
+          const active = isActive(pathname, href);
           return (
             <Link
               key={href}
@@ -52,5 +55,35 @@ export function Sidebar() {
         </p>
       </div>
     </aside>
+  );
+}
+
+export function MobileNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav
+      aria-label="Navegação principal"
+      className="fixed inset-x-0 bottom-0 z-30 grid h-16 grid-cols-5 border-t border-border bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+    >
+      {NAV.map(({ href, label, mobileLabel, icon: Icon }) => {
+        const active = isActive(pathname, href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-label={label}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex min-w-0 flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors",
+              active ? "text-primary" : "text-muted-foreground"
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            <span className="max-w-full truncate">{mobileLabel}</span>
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

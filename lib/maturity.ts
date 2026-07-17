@@ -87,16 +87,16 @@ export function maturityReference(bt: BoardType): MetricBand[] {
   if (bt === "scrum") {
     const T = SCRUM_THRESHOLDS;
     return [
-      { label: "Taxa de Acerto do Sprint", silver: `< ${T.sayDo.silverBelow}%`, gold: `${T.sayDo.silverBelow}–${T.sayDo.platinumMin}%`, platinum: `≥ ${T.sayDo.platinumMin}%` },
+      { label: "Taxa de Acerto do Sprint", silver: `< ${T.sayDo.silverBelow}%`, gold: `${T.sayDo.silverBelow}–${T.sayDo.platinumMin - 1}%`, platinum: `≥ ${T.sayDo.platinumMin}%` },
       { label: "Cycle time (p85)", silver: `> ${T.cycleP85Days.silverAbove} dias`, gold: `${T.cycleP85Days.platinumBelow}–${T.cycleP85Days.silverAbove} dias`, platinum: `< ${T.cycleP85Days.platinumBelow} dias` },
-      { label: "Flow efficiency", silver: `< ${T.flowEff.silverBelow}%`, gold: `${T.flowEff.silverBelow}–${T.flowEff.platinumMin}%`, platinum: `≥ ${T.flowEff.platinumMin}%` },
+      { label: "Flow efficiency", silver: `< ${T.flowEff.silverBelow}%`, gold: `${T.flowEff.silverBelow}–${T.flowEff.platinumMin - 1}%`, platinum: `≥ ${T.flowEff.platinumMin}%` },
       { label: "Taxa de defeitos", silver: `> ${T.defectRate.silverAbove}%`, gold: `${T.defectRate.platinumBelow}–${T.defectRate.silverAbove}%`, platinum: `< ${T.defectRate.platinumBelow}%` },
     ];
   }
   const T = KANBAN_THRESHOLDS;
   return [
     { label: "Cycle time (p85)", silver: `> ${T.cycleP85Days.silverAbove} dias`, gold: `${T.cycleP85Days.platinumBelow}–${T.cycleP85Days.silverAbove} dias`, platinum: `< ${T.cycleP85Days.platinumBelow} dias` },
-    { label: "Flow efficiency", silver: `< ${T.flowEff.silverBelow}%`, gold: `${T.flowEff.silverBelow}–${T.flowEff.platinumMin}%`, platinum: `≥ ${T.flowEff.platinumMin}%` },
+    { label: "Flow efficiency", silver: `< ${T.flowEff.silverBelow}%`, gold: `${T.flowEff.silverBelow}–${T.flowEff.platinumMin - 1}%`, platinum: `≥ ${T.flowEff.platinumMin}%` },
     { label: "Itens parados (aging)", silver: `> ${T.agingBreach.silverAbove}%`, gold: `${T.agingBreach.platinumBelow}–${T.agingBreach.silverAbove}%`, platinum: `< ${T.agingBreach.platinumBelow}%` },
     { label: "Taxa de defeitos", silver: `> ${T.defectRate.silverAbove}%`, gold: `${T.defectRate.platinumBelow}–${T.defectRate.silverAbove}%`, platinum: `< ${T.defectRate.platinumBelow}%` },
   ];

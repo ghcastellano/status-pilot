@@ -191,6 +191,7 @@ export default function DashboardPage() {
   const f = m.flow;
   const adv = m.advanced;
   const isScrum = m.team.board_type === "scrum";
+  const activeSprintSelected = Boolean(m.window?.activeSprintSelected);
   const stageOrder: string[] = adv.cfd.stages.map((s: any) => s.jira);
   const ci = buildChartInsights(m, lang);
 
@@ -279,13 +280,25 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard accent label={t("Cycle time", "Cycle time")} value={f.deliveryCycleTime.median} unit="d" sub={t(`méd ${f.deliveryCycleTime.mean}d · med ${f.deliveryCycleTime.median}d · p85 ${f.deliveryCycleTime.p85}d`, `mean ${f.deliveryCycleTime.mean}d · median ${f.deliveryCycleTime.median}d · p85 ${f.deliveryCycleTime.p85}d`)} insight={insights?.cycleTime} />
           {isScrum ? (
-            <KpiCard label={t("Velocity", "Velocity")} value={m.scrum?.avgVelocity ?? 0} unit="pts" sub={`σ ${m.scrum?.velocityStdev ?? 0}`} insight={insights?.secondary} />
+            <KpiCard
+              label={t("Velocity", "Velocity")}
+              value={activeSprintSelected ? "—" : (m.scrum?.avgVelocity ?? 0)}
+              unit={activeSprintSelected ? undefined : "pts"}
+              sub={activeSprintSelected ? t("disponível após o fechamento", "available after sprint close") : `σ ${m.scrum?.velocityStdev ?? 0}`}
+              insight={activeSprintSelected ? undefined : insights?.secondary}
+            />
           ) : (
             <KpiCard label={t("Throughput", "Throughput")} value={f.throughput.perWeekAvg} unit="/sem" sub={t("itens concluídos", "items done")} insight={insights?.secondary} />
           )}
           <KpiCard label={t("Eficiência de fluxo", "Flow efficiency")} value={Math.round(f.flowEfficiency * 100)} unit="%" sub={t("ativo ÷ total", "active ÷ total")} insight={insights?.flowEfficiency} />
           {isScrum ? (
-            <KpiCard label={t("Taxa de Acerto do Sprint", "Sprint Hit Rate")} value={Math.round((m.scrum?.sayDoRatioAvg ?? 0) * 100)} unit="%" sub={t("entregue ÷ combinado", "delivered ÷ committed")} insight={insights?.predictability} />
+            <KpiCard
+              label={t("Taxa de Acerto do Sprint", "Sprint Hit Rate")}
+              value={activeSprintSelected ? "—" : Math.round((m.scrum?.sayDoRatioAvg ?? 0) * 100)}
+              unit={activeSprintSelected ? undefined : "%"}
+              sub={activeSprintSelected ? t("disponível após o fechamento", "available after sprint close") : t("entregue ÷ combinado", "delivered ÷ committed")}
+              insight={activeSprintSelected ? undefined : insights?.predictability}
+            />
           ) : (
             <KpiCard label={t("Previsibilidade", "Predictability")} value={f.deliveryCycleTime.p85} unit="d" sub={`SLE: 85% ≤ ${f.deliveryCycleTime.p85}d`} insight={insights?.predictability} />
           )}
