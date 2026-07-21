@@ -264,6 +264,29 @@ export class StoredProvider extends JiraBase implements JiraProvider {
 }
 
 /**
+ * Provider FORGE (`asApp`) — o caminho profissional/Marketplace. Construído por
+ * request a partir do contexto de uma invocação Forge Remote já validada
+ * (ver lib/forge-auth.ts): base = api.atlassian.com/ex/jira/{cloudId}, header =
+ * o token asApp curto que a Atlassian injeta. Zero credencial armazenada — o
+ * token vive só durante a invocação (regra do Marketplace de não guardar tokens).
+ *
+ * Reusa 100% do `JiraBase`: os mesmos 11 métodos e a mesma ingestão (searchJql,
+ * Agile API, Velocity Chart) rodam sem alteração — só muda como `getBase()`
+ * resolve base+auth. É a diferença entre "PoC via Basic" e "produto instalável".
+ */
+export class ForgeProvider extends JiraBase implements JiraProvider {
+  constructor(private ctx: { apiBaseUrl: string; systemToken: string }) {
+    super();
+  }
+  protected async getBase() {
+    return {
+      baseUrl: this.ctx.apiBaseUrl.replace(/\/$/, ""),
+      authHeader: `Bearer ${this.ctx.systemToken}`,
+    };
+  }
+}
+
+/**
  * Factory: conexão Basic do /config (resolvida por-request pelo StoredProvider),
  * com fallback p/ Basic via env (dev/scripts). NÃO é usado por scripts/sync —
  * esses seguem com `new JiraClient(jiraConfigFromEnv())`.

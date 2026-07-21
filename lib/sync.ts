@@ -6,7 +6,7 @@
  * a granularidade dos estágios do bloco SPMETA. Times/sprints/épicos são config
  * já no banco e não são tocados aqui.
  */
-import { jiraProviderFromEnv, extractSpmeta, normStageName, stageToStatus } from "./jira";
+import { jiraProviderFromEnv, extractSpmeta, normStageName, stageToStatus, type JiraProvider } from "./jira";
 import { ingestBoard } from "./jira-ingest";
 import type { TeamRow } from "./metrics";
 import { getSupabaseAdmin } from "./supabase";
@@ -31,10 +31,18 @@ export interface SyncResult {
  * Sincroniza os times ativos a partir do Jira. `onlyTeamId` restringe a UM time
  * (auto-sync em background ao selecionar um board no /config) — bem mais barato
  * que re-sincronizar tudo a cada seleção.
+ *
+ * `provider` injeta um `JiraProvider` alternativo — usado pelo endpoint Forge
+ * Remote, que passa um `ForgeProvider` (asApp) já autenticado. Sem ele, cai na
+ * conexão Basic do /config (fallback env). A ingestão em si é idêntica nos dois
+ * caminhos: é o que torna "PoC via Basic" e "produto Forge" o MESMO código.
  */
-export async function syncIssuesFromJira(onlyTeamId?: string): Promise<SyncResult> {
-  // Conexão Basic do /config (por empresa), com fallback p/ Basic via env.
-  const jira = jiraProviderFromEnv();
+export async function syncIssuesFromJira(
+  onlyTeamId?: string,
+  provider?: JiraProvider
+): Promise<SyncResult> {
+  // Provider injetado (Forge asApp) ou a conexão Basic do /config (fallback env).
+  const jira = provider ?? jiraProviderFromEnv();
   const sb = getSupabaseAdmin();
 
   // resolve fieldId por nome (deploy-safe)

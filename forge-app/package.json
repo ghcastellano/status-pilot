@@ -1,0 +1,12 @@
+{
+  "name": "status-pilot-forge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "App Forge fino do Status Pilot — Forge Remote apontando para o backend Vercel (asApp).",
+  "scripts": {
+    "lint": "forge lint",
+    "deploy": "forge deploy",
+    "install:site": "forge install",
+    "tunnel": "forge tunnel"
+  }
+}

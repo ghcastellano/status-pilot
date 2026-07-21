@@ -1,0 +1,69 @@
+# manifest.yml — app Forge FINO do Status Pilot (Forge Remote → backend Vercel).
+#
+# Este app NÃO tem lógica de métricas: ele só (1) é instalado pelo ADMIN do site
+# — o que concede os scopes `asApp` — e (2) encaminha invocações (trigger agendado
+# + page) para o nosso backend externo (Vercel) via Forge Remote, injetando o
+# token asApp. Toda a inteligência continua no Vercel/Supabase (ver docs/FORGE.md).
+#
+# É EXATAMENTE o padrão da ActionableAgile/55 Degrees: Forge fino + backend próprio.
+#
+# ⚠️ O schema do Forge Remote evolui — `forge lint` é a AUTORIDADE. Rode-o após
+#    editar. Docs: https://developer.atlassian.com/platform/forge/manifest-reference/
+
+# `app.id` é gerado por `forge register` (não commite um id de outra pessoa).
+app:
+  id: ari:cloud:ecosystem::app/REGISTRE-COM-forge-register
+  runtime:
+    name: nodejs22.x
+
+# Scopes concedidos pelo ADMIN na instalação → é o que o asApp pode ler.
+# Granular e mínimo (bom p/ review do Marketplace): só leitura de work + Agile.
+permissions:
+  scopes:
+    - read:jira-work
+    - read:board-scope:jira-software
+    - read:sprint:jira-software
+    - read:issue-details:jira-software
+  # Egress declarado: o Forge SÓ deixa o app falar com estes hosts.
+  external:
+    fetch:
+      backend:
+        - status-pilot-backend
+
+# Backend externo (Vercel) registrado como remote, com token asApp habilitado.
+remotes:
+  - key: status-pilot-backend
+    baseUrl: https://status-pilot.vercel.app
+    auth:
+      # injeta `x-forge-oauth-system` (token asApp) nas chamadas ao remote —
+      # é o token que o /api/forge/sync usa p/ chamar a Jira como o app.
+      appSystemToken:
+        enabled: true
+
+modules:
+  # Sync em background: a cada hora o Forge invoca o nosso endpoint remoto.
+  # (o token asApp tem TTL ~4h e é renovável a qualquer momento — casa com isto.)
+  scheduledTrigger:
+    - key: status-pilot-hourly-sync
+      interval: hour
+      endpoint: sync-endpoint
+
+  # Endpoint remoto = rota no nosso backend Vercel.
+  endpoint:
+    - key: sync-endpoint
+      remote: status-pilot-backend
+      route:
+        path: /api/forge/sync
+
+  # Página do app dentro do Jira (abre o dashboard). `layout: native` = sem chrome.
+  jira:globalPage:
+    - key: status-pilot-page
+      title: Status Pilot
+      layout: native
+      resource: dashboard
+
+# A UI da page é servida do nosso próprio backend (iframe), não empacotada aqui —
+# mantém o app Forge fino. Aponte p/ a rota do dashboard hospedada no Vercel.
+resources:
+  - key: dashboard
+    path: https://status-pilot.vercel.app
