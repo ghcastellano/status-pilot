@@ -8,5 +8,8 @@
     "deploy": "forge deploy",
     "install:site": "forge install",
     "tunnel": "forge tunnel"
+  },
+  "dependencies": {
+    "@forge/api": "^5.0.0"
   }
 }
