@@ -22,7 +22,6 @@ app:
 permissions:
   scopes:
     - read:jira-work
-    - read:jira-user
     - read:board-scope:jira-software
     - read:sprint:jira-software
 
@@ -52,14 +51,6 @@ modules:
       remote: status-pilot-backend
       route:
         path: /api/forge/sync
-
-  # Função Forge (roda DENTRO do Forge) + web-trigger de PROVA do asApp.
-  function:
-    - key: proof-fn
-      handler: index.proof
-  webtrigger:
-    - key: proof-whoami
-      function: proof-fn
 
 # NOTA: a page do app dentro do Jira (jira:globalPage) fica p/ a Fase 2 — o Forge
 # exige recurso estático LOCAL (resources.path), então uma UI hospedada no Vercel
