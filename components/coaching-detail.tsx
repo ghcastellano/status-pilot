@@ -101,9 +101,11 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
       {history.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Maturidade — últimas {history.length} semanas</CardTitle>
+            <CardTitle>Maturidade — últimas {history.length} {isScrum ? "sprints" : "semanas"}</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Recomputada semana a semana sobre a timeline do Jira (replay). Passe o mouse para ver as métricas de cada semana.
+              {isScrum
+                ? "Recomputada a cada sprint fechada sobre a timeline do Jira (replay). Passe o mouse para ver as métricas de cada sprint."
+                : "Recomputada semana a semana sobre a timeline do Jira (replay). Passe o mouse para ver as métricas de cada semana."}
             </p>
           </CardHeader>
           <CardContent>

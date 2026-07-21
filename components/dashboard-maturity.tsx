@@ -125,7 +125,7 @@ function MaturityLevelPanel({ team, mat, m, history }: { team: DashboardMaturity
           </div>
           {/* Histórico */}
           <div>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">Maturidade — últimas {history.length} semanas</p>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Maturidade — últimas {history.length} {isScrum ? "sprints" : "semanas"}</p>
             {history.length > 0 ? (
               <MaturityHistoryChart data={history} />
             ) : (

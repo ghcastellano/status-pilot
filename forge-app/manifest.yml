@@ -1,34 +1,29 @@
 # manifest.yml — app Forge FINO do Status Pilot (Forge Remote → backend Vercel).
 #
 # Este app NÃO tem lógica de métricas: ele só (1) é instalado pelo ADMIN do site
-# — o que concede os scopes `asApp` — e (2) encaminha invocações (trigger agendado
-# + page) para o nosso backend externo (Vercel) via Forge Remote, injetando o
-# token asApp. Toda a inteligência continua no Vercel/Supabase (ver docs/FORGE.md).
+# — o que concede os scopes `asApp` — e (2) encaminha invocações (trigger agendado)
+# para o nosso backend externo (Vercel) via Forge Remote, injetando o token asApp.
+# Toda a inteligência continua no Vercel/Supabase (ver docs/FORGE.md).
 #
 # É EXATAMENTE o padrão da ActionableAgile/55 Degrees: Forge fino + backend próprio.
 #
-# ⚠️ O schema do Forge Remote evolui — `forge lint` é a AUTORIDADE. Rode-o após
-#    editar. Docs: https://developer.atlassian.com/platform/forge/manifest-reference/
+# ⚠️ `forge lint` é a AUTORIDADE do schema. Rode-o após editar.
+#    Docs: https://developer.atlassian.com/platform/forge/manifest-reference/
 
-# `app.id` é gerado por `forge register` (não commite um id de outra pessoa).
+# `app.id` é gerado por `forge register`.
 app:
-  id: ari:cloud:ecosystem::app/REGISTRE-COM-forge-register
+  id: ari:cloud:ecosystem::app/53ed5828-17ac-4b65-b4e5-17e0f765774e
   runtime:
     name: nodejs22.x
 
 # Scopes concedidos pelo ADMIN na instalação → é o que o asApp pode ler.
 # Granular e mínimo (bom p/ review do Marketplace): só leitura de work + Agile.
+# O egress p/ o backend é implícito pelo `remotes` abaixo (não precisa external.fetch).
 permissions:
   scopes:
     - read:jira-work
     - read:board-scope:jira-software
     - read:sprint:jira-software
-    - read:issue-details:jira-software
-  # Egress declarado: o Forge SÓ deixa o app falar com estes hosts.
-  external:
-    fetch:
-      backend:
-        - status-pilot-backend
 
 # Backend externo (Vercel) registrado como remote, com token asApp habilitado.
 remotes:
@@ -55,15 +50,6 @@ modules:
       route:
         path: /api/forge/sync
 
-  # Página do app dentro do Jira (abre o dashboard). `layout: native` = sem chrome.
-  jira:globalPage:
-    - key: status-pilot-page
-      title: Status Pilot
-      layout: native
-      resource: dashboard
-
-# A UI da page é servida do nosso próprio backend (iframe), não empacotada aqui —
-# mantém o app Forge fino. Aponte p/ a rota do dashboard hospedada no Vercel.
-resources:
-  - key: dashboard
-    path: https://status-pilot.vercel.app
+# NOTA: a page do app dentro do Jira (jira:globalPage) fica p/ a Fase 2 — o Forge
+# exige recurso estático LOCAL (resources.path), então uma UI hospedada no Vercel
+# entra via Custom UI/remote resource depois. O spike prova o asApp pelo trigger.
