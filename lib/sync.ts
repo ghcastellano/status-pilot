@@ -39,7 +39,8 @@ export interface SyncResult {
  */
 export async function syncIssuesFromJira(
   onlyTeamId?: string,
-  provider?: JiraProvider
+  provider?: JiraProvider,
+  source: "basic" | "forge-asApp" = "basic"
 ): Promise<SyncResult> {
   // Provider injetado (Forge asApp) ou a conexão Basic do /config (fallback env).
   const jira = provider ?? jiraProviderFromEnv();
@@ -69,7 +70,11 @@ export async function syncIssuesFromJira(
     // Board REAL do Jira → ingestão via changelog. Sem board_id → path SPMETA (seed).
     if (team.jira_board_id) {
       const count = await ingestBoard(jira, team as TeamRow);
-      await sb.from("teams").update({ last_synced_at: new Date().toISOString() }).eq("id", team.id);
+      // carimba QUEM sincronizou (basic = token/PoC, forge-asApp = pipeline Forge)
+      await sb
+        .from("teams")
+        .update({ last_synced_at: new Date().toISOString(), last_sync_source: source })
+        .eq("id", team.id);
       byTeam.push({ team: team.id, count });
       continue;
     }

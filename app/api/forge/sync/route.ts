@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     // onde o 3LO batia). Barato e diagnóstico — é o "hello world" do spike.
     const whoami = await jira.myself().catch((e: Error) => ({ error: e.message }));
 
-    const result = await syncIssuesFromJira(teamId, jira);
+    const result = await syncIssuesFromJira(teamId, jira, "forge-asApp");
     return NextResponse.json({ ok: true, cloudId: ctx.cloudId, whoami, ...result });
   } catch (e) {
     const status = e instanceof ForgeAuthError ? e.status : 500;
