@@ -116,9 +116,23 @@ function deriveTimeline(
     }
   }
 
-  // START/END do cycle time — lógica do marvin: start = 1º "add ao Sprint"
-  // (campo Sprint) senão 1ª entrada em progress/development/doing; end = 1ª
-  // transição p/ done, em/após o start.
+  // START/END do cycle time — por CATEGORIA do status (new/indeterminate/done),
+  // que INDEPENDE de idioma: funciona com "Em andamento", "Live / Done" etc. do
+  // lavrai tanto quanto com nomes em inglês. Fallback p/ match por nome só quando
+  // a categoria é desconhecida (ex.: /status bloqueado → catOf vazio).
+  //   start = 1º "add ao Sprint" (scrum) senão 1ª entrada em status ATIVO
+  //           (categoria indeterminate); end = 1ª entrada em status DONE.
+  const catFor = (name?: string | null): string | undefined =>
+    name ? catOf.get(name.toLowerCase()) : undefined;
+  const isActive = (name: string) => {
+    const c = catFor(name);
+    return c ? c === "indeterminate" : incl(name, IN_PROGRESS_STATUSES);
+  };
+  const isDone = (name: string) => {
+    const c = catFor(name);
+    return c ? c === "done" : incl(name, DONE_STATUSES);
+  };
+
   const hist = (issue.changelog?.histories ?? []).slice().sort((a, b) => (a.created < b.created ? -1 : 1));
   let startedAt: string | null = null;
   for (const h of hist) {
@@ -129,21 +143,21 @@ function deriveTimeline(
   }
   if (!startedAt) {
     for (const h of hist) {
-      if (h.items.some((it) => it.field === "status" && it.toString && incl(it.toString, IN_PROGRESS_STATUSES))) {
+      if (h.items.some((it) => it.field === "status" && it.toString && isActive(it.toString))) {
         startedAt = h.created;
         break;
       }
     }
   }
+  // done independe de ter start detectado (p/ throughput contar entregas mesmo
+  // sem início claro); se há start, exige a transição de done em/após o start.
   let doneAt: string | null = null;
-  if (startedAt) {
-    const startMs = Date.parse(startedAt);
-    for (const h of hist) {
-      if (Date.parse(h.created) < startMs) continue;
-      if (h.items.some((it) => it.field === "status" && it.toString && incl(it.toString, DONE_STATUSES))) {
-        doneAt = h.created;
-        break;
-      }
+  const startMs = startedAt ? Date.parse(startedAt) : -Infinity;
+  for (const h of hist) {
+    if (Date.parse(h.created) < startMs) continue;
+    if (h.items.some((it) => it.field === "status" && it.toString && isDone(it.toString))) {
+      doneAt = h.created;
+      break;
     }
   }
   return { stages, startedAt, doneAt };
@@ -317,9 +331,12 @@ export async function ingestBoard(jira: JiraProvider, team: TeamRow): Promise<nu
   const scope = boardScope ?? (projectKey ? `project = "${projectKey}"` : null);
   if (!scope) throw new Error(`Time ${team.id} sem JQL de board nem jira_project_key.`);
 
-  // Janela: não-Done OU resolvidas nas últimas ~13 semanas; cap 500 issues mais
+  // Janela: não-Done OU ATUALIZADAS nas últimas ~13 semanas; cap 500 issues mais
   // recentes (projetos grandes têm milhares — limite de 60s serverless + p85).
-  const jql = `(${scope}) AND (statusCategory != Done OR resolved >= -91d) ORDER BY updated DESC`;
+  // Usa `updated` (não `resolved`): workflows com status Done que NÃO setam
+  // resolution (ex.: "Live / Done" do lavrai) deixam resolutiondate nulo, e um
+  // filtro por `resolved` excluiria as entregas — zerando throughput/cycle time.
+  const jql = `(${scope}) AND (statusCategory != Done OR updated >= -91d) ORDER BY updated DESC`;
   const fields = ["summary", "issuetype", "status", "created", "resolutiondate", "parent", ...spFields, sprintField].filter(
     (x): x is string => !!x
   );
