@@ -1,5 +1,6 @@
 "use client";
 
+import { useDemo } from "@/components/demo-workspace";
 import * as React from "react";
 import { Send, Sparkles, Database, Clock, ChevronDown, ChevronRight, RotateCcw } from "lucide-react";
 import { useTeam } from "@/components/team-context";
@@ -30,17 +31,17 @@ const FALLBACK_EXAMPLES = [
   "Algum time com throughput caindo?",
 ];
 
-function loadHistory(): AskEntry[] {
+function loadHistory(storageKey: string): AskEntry[] {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+    return JSON.parse(localStorage.getItem(storageKey) ?? "[]");
   } catch {
     return [];
   }
 }
 
-function persistEntry(entry: AskEntry, prev: AskEntry[]): AskEntry[] {
+function persistEntry(entry: AskEntry, prev: AskEntry[], storageKey: string): AskEntry[] {
   const updated = [entry, ...prev].slice(0, MAX_ENTRIES);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  localStorage.setItem(storageKey, JSON.stringify(updated));
   return updated;
 }
 
@@ -123,6 +124,8 @@ function HistoryItem({
 
 export default function AskPage() {
   const { selectedTeam } = useTeam();
+  const demo = useDemo();
+  const storageKey = demo ? `${STORAGE_KEY}:demo:v1` : STORAGE_KEY;
   const [q, setQ] = React.useState("");
   const [answer, setAnswer] = React.useState<string | null>(null);
   const [cached, setCached] = React.useState(false);
@@ -134,8 +137,8 @@ export default function AskPage() {
 
   // Carrega histórico apenas no cliente
   React.useEffect(() => {
-    setHistory(loadHistory());
-  }, []);
+    setHistory(loadHistory(storageKey));
+  }, [storageKey]);
 
   // Chips: últimas 5 perguntas únicas do histórico; fallback nos exemplos estáticos
   const chips = React.useMemo(() => {
@@ -180,7 +183,7 @@ export default function AskPage() {
           answer: data.answer,
           askedAt: new Date().toISOString(),
         };
-        setHistory((prev) => persistEntry(entry, prev));
+        setHistory((prev) => persistEntry(entry, prev, storageKey));
       }
     } catch (e) {
       setError((e as Error).message);
@@ -202,9 +205,9 @@ export default function AskPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Perguntar</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Pergunte em linguagem natural — a IA responde considerando{" "}
+          {demo ? "Demonstração: explore uma análise ilustrativa dos dados fictícios. As respostas não são geradas por IA ao vivo." : <>Pergunte em linguagem natural — a IA responde considerando{" "}
           <span className="font-medium">os dois times</span> (Espresso e Cold Brew), lidos do Jira.
-          Dá pra comparar.
+          Dá pra comparar.</>}
         </p>
       </div>
 

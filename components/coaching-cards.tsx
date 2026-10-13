@@ -4,6 +4,7 @@
  * Cards da camada de coaching (tela de detalhe): plano, experimentos e sinais
  * comportamentais. Escrita otimista + flash "salvo ✓". Method-aware via boardType.
  */
+import { useDemo } from "@/components/demo-workspace";
 import * as React from "react";
 import { Plus, X, MessageSquare } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -170,6 +171,7 @@ const PLAN_FIELDS: { key: keyof CoachingPlan; label: string; placeholder: string
 ];
 
 export function PlanCard({ teamId, initial }: { teamId: string; initial: CoachingPlan | null }) {
+  const demo = useDemo();
   const [plan, setPlan] = React.useState<Partial<CoachingPlan>>(initial ?? {});
   const [flashKey, flash, flashOk] = useFlash();
 
@@ -192,7 +194,7 @@ export function PlanCard({ teamId, initial }: { teamId: string; initial: Coachin
     <Card>
       <CardHeader>
         <CardTitle>Plano de coaching</CardTitle>
-        <p className="text-sm text-muted-foreground">Salva automaticamente ao sair do campo.</p>
+        <p className="text-sm text-muted-foreground">{demo ? "Sample plan · read-only" : "Salva automaticamente ao sair do campo."}</p>
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">
         {PLAN_FIELDS.map((f) => (

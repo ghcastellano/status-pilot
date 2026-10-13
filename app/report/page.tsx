@@ -1,5 +1,6 @@
 "use client";
 
+import { useDemo } from "@/components/demo-workspace";
 import * as React from "react";
 import { FileText, Copy, Check, Sparkles, RefreshCw, ChevronDown, ChevronRight, Clock } from "lucide-react";
 import { useTeam } from "@/components/team-context";
@@ -21,17 +22,17 @@ interface ReportEntry {
 const STORAGE_KEY = "sp_report_history";
 const MAX_ENTRIES = 20;
 
-function loadHistory(): ReportEntry[] {
+function loadHistory(storageKey: string): ReportEntry[] {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+    return JSON.parse(localStorage.getItem(storageKey) ?? "[]");
   } catch {
     return [];
   }
 }
 
-function persistEntry(entry: ReportEntry, prev: ReportEntry[]): ReportEntry[] {
+function persistEntry(entry: ReportEntry, prev: ReportEntry[], storageKey: string): ReportEntry[] {
   const updated = [entry, ...prev].slice(0, MAX_ENTRIES);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  localStorage.setItem(storageKey, JSON.stringify(updated));
   return updated;
 }
 
@@ -148,6 +149,8 @@ function HistoryItem({
 
 export default function ReportPage() {
   const { selectedTeam } = useTeam();
+  const demo = useDemo();
+  const storageKey = demo ? `${STORAGE_KEY}:demo:v1` : STORAGE_KEY;
   const [history, setHistory] = React.useState<ReportEntry[]>([]);
   const [viewEntry, setViewEntry] = React.useState<ReportEntry | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -157,8 +160,8 @@ export default function ReportPage() {
 
   // Carrega histórico do localStorage só no cliente
   React.useEffect(() => {
-    setHistory(loadHistory());
-  }, []);
+    setHistory(loadHistory(storageKey));
+  }, [storageKey]);
 
   // Limpa a view atual ao trocar de time
   React.useEffect(() => {
@@ -185,7 +188,7 @@ export default function ReportPage() {
         generatedAt: new Date().toISOString(),
         report: data.report,
       };
-      setHistory((prev) => persistEntry(entry, prev));
+      setHistory((prev) => persistEntry(entry, prev, storageKey));
       setViewEntry(entry);
     } catch (e) {
       setError((e as Error).message);
@@ -210,7 +213,7 @@ export default function ReportPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Status Report</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Resumo para stakeholders de{" "}
-            <span className="font-medium">{selectedTeam?.name ?? "—"}</span>, gerado dos dados do Jira.
+            <span className="font-medium">{selectedTeam?.name ?? "—"}</span>{demo ? ", com dados fictícios e análise ilustrativa." : ", gerado dos dados do Jira."}
           </p>
         </div>
         <div className="flex items-center gap-2">

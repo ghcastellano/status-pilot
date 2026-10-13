@@ -19,11 +19,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# env — NUNCA commitar segredos
-.env
-.env*.local
+# environment files
+.env*
 
-# estado local dos scripts (mapeamentos do Jira)
+# local Jira script state
 scripts/.jira-keymap.json
 scripts/.jira-datefields.json
 

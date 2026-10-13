@@ -1,3 +1,6 @@
+import { cookies } from "next/headers";
+import { DemoProvider, DemoBanner } from "@/components/demo-workspace";
+import { DEMO_COOKIE, DEMO_VERSION, isDemoOnly } from "@/lib/demo/session";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
@@ -35,6 +38,7 @@ export default function RootLayout({
           enableSystem={false}
         >
           <LangProvider>
+            <DemoProvider active={isDemoOnly() || cookies().get(DEMO_COOKIE)?.value === DEMO_VERSION} locked={isDemoOnly()}>
             <TeamProvider>
               <div className="flex min-h-screen">
                 <Sidebar />
@@ -46,11 +50,13 @@ export default function RootLayout({
                       <ThemeToggle />
                     </div>
                   </header>
+                  <DemoBanner />
                   <main className="flex-1 p-4 pb-20 md:p-8">{children}</main>
                 </div>
                 <MobileNav />
               </div>
             </TeamProvider>
+            </DemoProvider>
           </LangProvider>
         </ThemeProvider>
       </body>

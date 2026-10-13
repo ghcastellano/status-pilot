@@ -1,5 +1,6 @@
 "use client";
 
+import { DemoLauncher, useDemo } from "@/components/demo-workspace";
 import * as React from "react";
 import Link from "next/link";
 import { RefreshCw, Sparkles, ChevronDown, Plug } from "lucide-react";
@@ -33,6 +34,7 @@ function ChartNote({ text }: { text?: string }) {
 }
 
 export default function DashboardPage() {
+  const demo = useDemo();
   const t = useT();
   const { lang } = useLang();
   const { selectedTeam, teams, loading: teamsLoading } = useTeam();
@@ -171,6 +173,7 @@ export default function DashboardPage() {
             <Plug className="h-4 w-4" /> {t("Ir para Configurar", "Go to Setup")}
           </Button>
         </Link>
+        <div className="mt-8 text-left"><DemoLauncher /></div>
       </div>
     );
   }
@@ -248,7 +251,7 @@ export default function DashboardPage() {
               <SelectContent>{PERIODS.map((p) => <SelectItem key={p.v} value={p.v}>{p.label}</SelectItem>)}</SelectContent>
             </Select>
           )}
-          <Button variant="outline" onClick={doSync} disabled={syncing}>
+          <Button variant="outline" onClick={doSync} disabled={syncing || demo}>
             <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
             {syncing ? t("Sincronizando…", "Syncing…") : t("Sincronizar", "Sync")}
           </Button>
@@ -273,7 +276,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Sparkles className="h-3.5 w-3.5 text-primary" />
-          {insightLoading ? t("IA interpretando cada métrica…", "AI reading each metric…") : t("Leitura automática da IA em cada métrica", "Automatic AI reading of each metric")}
+          {demo ? t("Análise ilustrativa dos dados de exemplo", "Illustrative analysis of sample data") : insightLoading ? t("IA interpretando cada métrica…", "AI reading each metric…") : t("Leitura automática da IA em cada métrica", "Automatic AI reading of each metric")}
         </div>
 
         {/* 4 KPIs principais — cada um com a interpretação da IA */}

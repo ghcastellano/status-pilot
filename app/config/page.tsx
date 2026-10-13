@@ -7,6 +7,7 @@
  * /api/teams). Com Basic auth o tipo scrum/kanban é real; no fallback OAuth o
  * tipo é "unknown" (detectado na sincronização).
  */
+import { DemoLauncher, useDemo } from "@/components/demo-workspace";
 import * as React from "react";
 import {
   Plus,
@@ -98,6 +99,7 @@ function TypeBadge({ type }: { type: "scrum" | "kanban" }) {
 }
 
 export default function ConfigPage() {
+  const demo = useDemo();
   const [status, setStatus] = React.useState<JiraStatus | null>(null);
   const [boards, setBoards] = React.useState<Board[] | null>(null);
   const [total, setTotal] = React.useState(0);
@@ -359,6 +361,9 @@ export default function ConfigPage() {
         </p>
       </div>
 
+      <DemoLauncher />
+      <fieldset disabled={demo} className="min-w-0 space-y-6">
+      {demo && <p className="text-sm text-muted-foreground">Exit the sample workspace to connect Jira. Your existing connection remains unchanged.</p>}
       {/* Connection card */}
       <Card>
         <CardHeader>
@@ -669,6 +674,7 @@ export default function ConfigPage() {
           )}
         </CardContent>
       </Card>
+      </fieldset>
     </div>
   );
 }

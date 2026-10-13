@@ -37,7 +37,6 @@
 - **Deploy no Vercel:** https://status-pilot-omega.vercel.app · Repo: https://github.com/ghcastellano/status-pilot
 
 ### Pendências / próximos passos
-- [ ] Colar o plano em `PLANO-SEMANA-1.md`.
 - [ ] Tornar o repo público (build-in-public), se quiser.
 - [ ] (Opcional) Cron que avança cards no tempo → changelog REAL crescente.
 - [ ] (Opcional) Revogar/rotacionar o VERCEL_TOKEN se não for mais usar.
@@ -63,7 +62,6 @@
 - Insights específicos nos 2 times (acharam o épico certo de cada um, citam Code Review + outlier nominal).
 
 ### Pendências / próximos passos
-- [ ] Colar o plano em `PLANO-SEMANA-1.md`.
 - [ ] Tornar o repo público (build-in-public), se quiser.
 - [ ] (Opcional) Cron que avança cards no tempo → changelog REAL crescente.
 - [ ] (Opcional) Revogar/rotacionar o `VERCEL_TOKEN` se não for mais usar.

@@ -2,6 +2,7 @@
 
 /** Detalhe de um time: histórico, composição do tier, plano, experimentos,
  *  sinais comportamentais, evidência das métricas e thresholds. */
+import { useDemo } from "@/components/demo-workspace";
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -46,6 +47,7 @@ export interface TeamDetail {
 const QUANT_PILLARS: Pillar[] = ["flow", "quality"];
 
 export function TeamDetailPanel({ d }: { d: TeamDetail }) {
+  const demo = useDemo();
   const [showEvidence, setShowEvidence] = React.useState(false);
   const { team, maturity: mat, history, plan, assessment, experiments, evidence } = d;
   const comments = d.comments ?? [];
@@ -94,7 +96,7 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
             </p>
           )}
         </div>
-        <AuthorField />
+        {!demo && <AuthorField />}
       </div>
 
       {/* Histórico */}
@@ -141,7 +143,7 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
       </Card>
 
       {/* Coaching: plano + experimentos (2/3) · sinais (1/3) */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <fieldset disabled={demo} className="grid min-w-0 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <PlanCard teamId={team.id} initial={plan} />
           <ExperimentsCard teamId={team.id} boardType={team.board_type} initial={experiments} initialComments={comments} />
@@ -153,7 +155,7 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
           initialSignals={assessment?.signals ?? {}}
           initialNote={assessment?.note ?? null}
         />
-      </div>
+      </fieldset>
 
       {/* Histórico de mudanças — só o que mudou de fato (old→new) */}
       <HistoryPanel entries={fieldHistory} boardType={team.board_type} />

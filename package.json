@@ -6,7 +6,6 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
     "jira:check": "tsx scripts/check-connections.ts",
     "jira:workflows": "tsx scripts/setup-jira-workflows.ts",
     "jira:boards": "tsx scripts/setup-jira-boards.ts",
@@ -17,7 +16,9 @@
     "db:sync": "tsx scripts/sync-jira-to-supabase.ts",
     "db:replay": "tsx scripts/replay-maturity-history.ts",
     "db:seed:coaching": "tsx scripts/seed-coaching-demo.ts",
-    "test:reconcile": "tsx scripts/test-reconcile.ts"
+    "test:reconcile": "tsx scripts/test-reconcile.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-select": "^2.1.1",
