@@ -1,4 +1,5 @@
 "use client";
+import { useText } from "@/components/lang-context";
 
 import { useTeam } from "@/components/team-context";
 import {
@@ -11,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 export function TeamSelector() {
+  const tx = useText();
   const { teams, selectedTeam, setSelectedTeamId, loading } = useTeam();
 
   if (loading) {
@@ -26,7 +28,7 @@ export function TeamSelector() {
         onValueChange={(v) => setSelectedTeamId(v)}
       >
         <SelectTrigger className="w-56">
-          <SelectValue placeholder="Selecione um time" />
+          <SelectValue placeholder={tx("Selecione um time")} />
         </SelectTrigger>
         <SelectContent>
           {teams.map((t) => (

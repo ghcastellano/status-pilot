@@ -1,4 +1,5 @@
 "use client";
+import { useText } from "@/components/lang-context";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -17,6 +18,7 @@ const isActive = (pathname: string, href: string) =>
   href === "/" ? pathname === href : pathname.startsWith(href);
 
 export function Sidebar() {
+  const tx = useText();
   const pathname = usePathname();
 
   return (
@@ -44,14 +46,14 @@ export function Sidebar() {
               )}
             >
               <Icon className="h-4 w-4" />
-              {label}
+              {tx(label)}
             </Link>
           );
         })}
       </nav>
       <div className="border-t border-border p-4">
         <p className="text-xs text-muted-foreground">
-          Dados fictícios · <span className="font-medium">Café Lavra</span>
+          {tx("Dados fictícios ·")}{" "}<span className="font-medium">Café Lavra</span>
         </p>
       </div>
     </aside>
@@ -59,11 +61,12 @@ export function Sidebar() {
 }
 
 export function MobileNav() {
+  const tx = useText();
   const pathname = usePathname();
 
   return (
     <nav
-      aria-label="Navegação principal"
+      aria-label={tx("Navegação principal")}
       className="fixed inset-x-0 bottom-0 z-30 grid h-16 grid-cols-5 border-t border-border bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >
       {NAV.map(({ href, label, mobileLabel, icon: Icon }) => {
@@ -72,7 +75,7 @@ export function MobileNav() {
           <Link
             key={href}
             href={href}
-            aria-label={label}
+            aria-label={tx(label)}
             aria-current={active ? "page" : undefined}
             className={cn(
               "flex min-w-0 flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors",
@@ -80,7 +83,7 @@ export function MobileNav() {
             )}
           >
             <Icon className="h-4 w-4" />
-            <span className="max-w-full truncate">{mobileLabel}</span>
+            <span className="max-w-full truncate">{tx(mobileLabel)}</span>
           </Link>
         );
       })}

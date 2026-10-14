@@ -1,4 +1,5 @@
 "use client";
+import { useText, useLang, useLocale } from "@/components/lang-context";
 
 import { useDemo } from "@/components/demo-workspace";
 import * as React from "react";
@@ -84,8 +85,8 @@ function renderMarkdown(md: string): React.ReactNode {
 
 // ── Utilitários de data ───────────────────────────────────────────────────────
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString("pt-BR", {
+function fmtDate(iso: string, locale: string) {
+  return new Date(iso).toLocaleString(locale, {
     day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
   });
 }
@@ -105,6 +106,8 @@ function HistoryItem({
   onCopy: () => void;
   copying: boolean;
 }) {
+  const tx = useText();
+  const locale = useLocale();
   const [expanded, setExpanded] = React.useState(false);
   return (
     <div className="rounded-lg border border-border bg-card/50 text-sm">
@@ -120,7 +123,7 @@ function HistoryItem({
             <span className="font-medium text-foreground">{entry.teamName}</span>
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="h-3 w-3" />
-              {fmtDate(entry.generatedAt)}
+              {fmtDate(entry.generatedAt, locale)}
             </span>
           </div>
           {!expanded && (
@@ -129,8 +132,7 @@ function HistoryItem({
         </div>
         <div className="flex shrink-0 gap-1" onClick={(e) => e.stopPropagation()}>
           <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onView}>
-            Ver
-          </Button>
+            {tx("Ver")}</Button>
           <Button variant="ghost" size="sm" className="h-7 px-2" onClick={onCopy}>
             {copying ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
           </Button>
@@ -148,9 +150,12 @@ function HistoryItem({
 // ── Página principal ──────────────────────────────────────────────────────────
 
 export default function ReportPage() {
+  const tx = useText();
+  const locale = useLocale();
   const { selectedTeam } = useTeam();
   const demo = useDemo();
-  const storageKey = demo ? `${STORAGE_KEY}:demo:v1` : STORAGE_KEY;
+  const { lang } = useLang();
+  const storageKey = `${demo ? `${STORAGE_KEY}:demo:v1` : STORAGE_KEY}:${lang}`;
   const [history, setHistory] = React.useState<ReportEntry[]>([]);
   const [viewEntry, setViewEntry] = React.useState<ReportEntry | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -167,7 +172,7 @@ export default function ReportPage() {
   React.useEffect(() => {
     setViewEntry(null);
     setError(null);
-  }, [selectedTeam?.id]);
+  }, [selectedTeam?.id, lang]);
 
   async function generate(force = false) {
     if (!selectedTeam || loading) return;
@@ -177,10 +182,10 @@ export default function ReportPage() {
       const res = await fetch("/api/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamId: selectedTeam.id, sessionId: getSessionId(), force }),
+        body: JSON.stringify({ teamId: selectedTeam.id, lang, sessionId: getSessionId(), force }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Falha ao gerar.");
+      if (!res.ok) throw new Error(data.error ?? tx("Falha ao gerar."));
       const entry: ReportEntry = {
         id: String(Date.now()),
         teamId: selectedTeam.id,
@@ -212,18 +217,17 @@ export default function ReportPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Status Report</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Resumo para stakeholders de{" "}
-            <span className="font-medium">{selectedTeam?.name ?? "—"}</span>{demo ? ", com dados fictícios e análise ilustrativa." : ", gerado dos dados do Jira."}
+            {tx("Resumo para stakeholders de")}{" "}{" "}
+            <span className="font-medium">{selectedTeam?.name ?? "—"}</span>{demo ? tx(", com dados fictícios e análise ilustrativa.") : tx(", gerado dos dados do Jira.")}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => generate(true)} disabled={loading} title="Ignora cache e gera report novo">
+          <Button variant="outline" size="sm" onClick={() => generate(true)} disabled={loading} title={tx("Ignora cache e gera report novo")}>
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Regenerar
-          </Button>
+            {tx("Regenerar")}</Button>
           <Button onClick={() => generate(false)} disabled={loading}>
             <FileText className="h-4 w-4" />
-            {loading ? "Gerando…" : "Gerar report"}
+            {loading ? tx("Gerando…") : tx("Gerar report")}
           </Button>
         </div>
       </div>
@@ -235,8 +239,7 @@ export default function ReportPage() {
       {loading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Sparkles className="h-4 w-4 animate-pulse text-primary" />
-          Escrevendo o report com dados do Jira…
-        </div>
+          {tx("Escrevendo o report com dados do Jira…")}</div>
       )}
 
       {/* Report atual */}
@@ -249,7 +252,7 @@ export default function ReportPage() {
                 <Badge variant="secondary">{viewEntry.teamName}</Badge>
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
-                  {fmtDate(viewEntry.generatedAt)}
+                  {fmtDate(viewEntry.generatedAt, locale)}
                 </span>
               </div>
               <Button
@@ -258,8 +261,8 @@ export default function ReportPage() {
                 onClick={() => copyReport(viewEntry.report, viewEntry.id)}
               >
                 {copiedId === viewEntry.id
-                  ? <><Check className="h-4 w-4" /> Copiado</>
-                  : <><Copy className="h-4 w-4" /> Copiar</>}
+                  ? <><Check className="h-4 w-4" /> {tx("Copiado")}</>
+                  : <><Copy className="h-4 w-4" /> {tx("Copiar")}</>}
               </Button>
             </div>
             <article>{renderMarkdown(viewEntry.report)}</article>
@@ -272,11 +275,9 @@ export default function ReportPage() {
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-14 text-center">
           <FileText className="h-8 w-8 text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground">
-            Clique em <span className="font-medium text-foreground">Gerar report</span> para criar o status report do time atual.
-          </p>
+            {tx("Clique em")}{" "}<span className="font-medium text-foreground">{tx("Gerar report")}</span> {tx("para criar o status report do time atual.")}</p>
           <p className="text-xs text-muted-foreground/70">
-            Use <span className="font-medium">Regenerar</span> para forçar um novo sem cache.
-          </p>
+            Use <span className="font-medium">{tx("Regenerar")}</span> {tx("para forçar um novo sem cache.")}</p>
         </div>
       )}
 
@@ -288,8 +289,7 @@ export default function ReportPage() {
             className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             <Clock className="h-4 w-4" />
-            Histórico
-            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+            {tx("Histórico")}{" "}<Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
               {historyWithoutCurrent.length}
             </Badge>
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showHistory ? "rotate-180" : ""}`} />

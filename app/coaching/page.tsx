@@ -1,4 +1,5 @@
 "use client";
+import { useText } from "@/components/lang-context";
 
 /**
  * /coaching — página ÚNICA (um item no menu). Abas Portfolio · Detalhe · Leadership.
@@ -27,6 +28,7 @@ const j = (r: Response) =>
 const needsAttention = (b: PortfolioBoard) => b.status === "at_risk" || b.maturity.tier === 1;
 
 export default function CoachingPage() {
+  const tx = useText();
   const { selectedTeam, setSelectedTeamId } = useTeam();
   const [tab, setTab] = React.useState("portfolio");
   const [showRoster, setShowRoster] = React.useState(false);
@@ -100,13 +102,11 @@ export default function CoachingPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Trophy className="h-5 w-5 text-primary" />
             <h1 className="text-2xl font-semibold tracking-tight">Agile Coaching</h1>
-            <Badge variant="secondary" title="Thresholds de maturidade ainda não calibrados com dados reais de campo.">
-              thresholds a calibrar
-            </Badge>
+            <Badge variant="secondary" title={tx("Thresholds de maturidade ainda não calibrados com dados reais de campo.")}>
+              {tx("thresholds a calibrar")}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            O que está sendo coachado, por quê, e o que mudou · maturidade weakest-link por método (Scrum/Kanban).
-          </p>
+            {tx("O que está sendo coachado, por quê, e o que mudou · maturidade weakest-link por método (Scrum/Kanban).")}</p>
         </div>
         {tab === "portfolio" && boards && <ManageTeamsButton onClick={() => setShowRoster(true)} />}
       </div>
@@ -114,7 +114,7 @@ export default function CoachingPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-          <TabsTrigger value="detail">Detalhe{selectedTeam ? ` · ${selectedTeam.name}` : ""}</TabsTrigger>
+          <TabsTrigger value="detail">{tx("Detalhe")}{" "}{selectedTeam ? ` · ${selectedTeam.name}` : ""}</TabsTrigger>
           <TabsTrigger value="leadership">Leadership</TabsTrigger>
         </TabsList>
 
@@ -133,16 +133,14 @@ export default function CoachingPage() {
               <ProgramHeader boards={program} />
               {program.length === 0 ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">
-                  Nenhum time no programa de coaching.{" "}
+                  {tx("Nenhum time no programa de coaching.")}{" "}{" "}
                   <button onClick={() => setShowRoster(true)} className="font-medium text-primary hover:underline">
-                    Gerenciar times
-                  </button>{" "}
-                  para incluir um.
-                </div>
+                    {tx("Gerenciar times")}</button>{" "}
+                  {tx("para incluir um.")}</div>
               ) : (
                 <div className="space-y-8">
-                  <Section title="Precisa de atenção" blurb="Regredindo ou preso — comece por aqui." chip="bg-destructive/10 text-destructive" boards={attention} onOpen={openTeam} />
-                  <Section title="No caminho" blurb="Evoluindo bem." chip="bg-primary/10 text-primary" boards={onTrack} onOpen={openTeam} />
+                  <Section title={tx("Precisa de atenção")} blurb={tx("Regredindo ou preso — comece por aqui.")} chip="bg-destructive/10 text-destructive" boards={attention} onOpen={openTeam} />
+                  <Section title={tx("No caminho")} blurb={tx("Evoluindo bem.")} chip="bg-primary/10 text-primary" boards={onTrack} onOpen={openTeam} />
                 </div>
               )}
             </>

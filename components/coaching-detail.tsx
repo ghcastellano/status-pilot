@@ -1,4 +1,5 @@
 "use client";
+import { useMetricDisplay, useText, useLocale } from "@/components/lang-context";
 
 /** Detalhe de um time: histórico, composição do tier, plano, experimentos,
  *  sinais comportamentais, evidência das métricas e thresholds. */
@@ -47,6 +48,7 @@ export interface TeamDetail {
 const QUANT_PILLARS: Pillar[] = ["flow", "quality"];
 
 export function TeamDetailPanel({ d }: { d: TeamDetail }) {
+  const tx = useText();
   const demo = useDemo();
   const [showEvidence, setShowEvidence] = React.useState(false);
   const { team, maturity: mat, history, plan, assessment, experiments, evidence } = d;
@@ -71,29 +73,28 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
                 {mat.tierName}
               </Badge>
             ) : (
-              <Badge variant="secondary">Sem dados</Badge>
+              <Badge variant="secondary">{tx("Sem dados")}</Badge>
             )}
             {d.status && (
               <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", STATUS_META[d.status].cls)}>
-                {STATUS_META[d.status].label}
+                {tx(STATUS_META[d.status].label)}
               </span>
             )}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {mat.tierDesc}
+            {tx(mat.tierDesc)}
             {d.coach ? ` · Coach: ${d.coach}` : ""}
           </p>
           {limiting.length > 0 && (
             <p className="mt-1 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground/80">Para subir:</span>{" "}
-              {limiting.map((m) => `${m.label}${m.nextTarget ? ` (${m.nextTarget})` : ""}`).join(" · ")}
+              <span className="font-medium text-foreground/80">{tx("Para subir:")}</span>{" "}
+              {limiting.map((m) => `${tx(m.label)}${m.nextTarget ? ` (${m.nextTarget})` : ""}`).join(" · ")}
             </p>
           )}
-          {mat.note && <p className="mt-1 text-xs text-amber-600">⚠ {mat.note}</p>}
+          {mat.note && <p className="mt-1 text-xs text-amber-600">⚠ {tx(mat.note)}</p>}
           {mat.sayDo?.band === "high" && (
             <p className="mt-1 text-xs text-amber-600">
-              ⚠ Say-Do em {mat.sayDo.pct}% — possível sub-commit (planejamento conservador). Não penaliza o tier.
-            </p>
+              {tx("⚠ Say-Do em")}{" "}{mat.sayDo.pct}{tx("% — possível sub-commit (planejamento conservador). Não penaliza o tier.")}</p>
           )}
         </div>
         {!demo && <AuthorField />}
@@ -103,11 +104,11 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
       {history.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Maturidade — últimas {history.length} {isScrum ? "sprints" : "semanas"}</CardTitle>
+            <CardTitle>{tx("Maturidade — últimas")}{" "}{history.length} {isScrum ? "sprints" : tx("semanas")}</CardTitle>
             <p className="text-sm text-muted-foreground">
               {isScrum
-                ? "Recomputada a cada sprint fechada sobre a timeline do Jira (replay). Passe o mouse para ver as métricas de cada sprint."
-                : "Recomputada semana a semana sobre a timeline do Jira (replay). Passe o mouse para ver as métricas de cada semana."}
+                ? tx("Recomputada a cada sprint fechada sobre a timeline do Jira (replay). Passe o mouse para ver as métricas de cada sprint.")
+                : tx("Recomputada semana a semana sobre a timeline do Jira (replay). Passe o mouse para ver as métricas de cada semana.")}
             </p>
           </CardHeader>
           <CardContent>
@@ -119,10 +120,9 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
       {/* Composição do tier */}
       <Card>
         <CardHeader>
-          <CardTitle>Como o tier foi definido — weakest-link</CardTitle>
+          <CardTitle>{tx("Como o tier foi definido — weakest-link")}</CardTitle>
           <p className="text-sm text-muted-foreground">
-            O tier é o <span className="font-medium">menor</span> entre as métricas quantitativas. A métrica que trava está destacada.
-          </p>
+            {tx("O tier é o")}{" "}<span className="font-medium">{tx("menor")}</span> {tx("entre as métricas quantitativas. A métrica que trava está destacada.")}</p>
         </CardHeader>
         <CardContent className="space-y-5">
           {QUANT_PILLARS.map((pillar) => {
@@ -130,7 +130,7 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
             if (rows.length === 0) return null;
             return (
               <div key={pillar}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{PILLAR_LABEL[pillar]}</p>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{tx(PILLAR_LABEL[pillar])}</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {rows.map((mt) => (
                     <MetricRow key={mt.key} mt={mt} isWeak={weakest.has(mt.key)} />
@@ -167,14 +167,14 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
           className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronDown className={cn("h-4 w-4 transition-transform", showEvidence && "rotate-180")} />
-          Evidência das métricas {showEvidence ? "" : "— mostrar"}
+          {tx("Evidência das métricas")}{" "}{showEvidence ? "" : tx("— mostrar")}
         </button>
         {showEvidence && (
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Cycle time — distribuição (p50 / p85)</CardTitle>
-                <p className="text-sm text-muted-foreground">Base da métrica “Cycle time (p85)”, em dias.</p>
+                <CardTitle>{tx("Cycle time — distribuição (p50 / p85)")}</CardTitle>
+                <p className="text-sm text-muted-foreground">{tx("Base da métrica “Cycle time (p85)”, em dias.")}</p>
               </CardHeader>
               <CardContent>
                 <CycleScatter data={evidence.scatter} p50={evidence.cycleP50} p85={evidence.cycleP85} />
@@ -183,8 +183,8 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
             {isScrum && evidence.velocity ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>Velocity por sprint</CardTitle>
-                  <p className="text-sm text-muted-foreground">Contexto — velocity por sprint; não entra no tier.</p>
+                  <CardTitle>{tx("Velocity por sprint")}</CardTitle>
+                  <p className="text-sm text-muted-foreground">{tx("Contexto — velocity por sprint; não entra no tier.")}</p>
                 </CardHeader>
                 <CardContent>
                   <VelocityBar data={evidence.velocity} />
@@ -193,8 +193,8 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
             ) : (
               <Card>
                 <CardHeader>
-                  <CardTitle>Throughput por semana</CardTitle>
-                  <p className="text-sm text-muted-foreground">Contexto — throughput por semana; não entra no tier.</p>
+                  <CardTitle>{tx("Throughput por semana")}</CardTitle>
+                  <p className="text-sm text-muted-foreground">{tx("Contexto — throughput por semana; não entra no tier.")}</p>
                 </CardHeader>
                 <CardContent>
                   <ThroughputBar series={evidence.throughputSeries} />
@@ -212,11 +212,13 @@ export function TeamDetailPanel({ d }: { d: TeamDetail }) {
 }
 
 function MetricRow({ mt, isWeak }: { mt: MetricEval; isWeak: boolean }) {
+  const tx = useText();
+  const metricDisplay = useMetricDisplay();
   const chip = mt.tier ? TIER_META[mt.tier] : null;
   return (
     <div className={cn("rounded-lg border border-border p-3", isWeak && "border-l-4 border-l-amber-500 bg-amber-500/[0.03]")}>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">{mt.label}</span>
+        <span className="text-sm font-medium">{tx(mt.label)}</span>
         {chip ? (
           <Badge variant={chip.token} className="text-[10px]">
             {chip.name}
@@ -227,36 +229,36 @@ function MetricRow({ mt, isWeak }: { mt: MetricEval; isWeak: boolean }) {
           </Badge>
         )}
       </div>
-      <div className={cn("mt-1 text-2xl font-semibold tabular-nums", tierTextClass(mt.tier))}>{mt.display}</div>
+      <div className={cn("mt-1 text-2xl font-semibold tabular-nums", tierTextClass(mt.tier))}>{metricDisplay(mt.display)}</div>
       <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
         {mt.tier == null ? (
-          <span className="text-muted-foreground">sem dados suficientes</span>
+          <span className="text-muted-foreground">{tx("sem dados suficientes")}</span>
         ) : mt.nextTarget ? (
-          <span className="text-muted-foreground">meta: {mt.nextTarget}</span>
+          <span className="text-muted-foreground">{tx("meta:")}{" "}{mt.nextTarget}</span>
         ) : (
-          <span className="text-platinum-foreground">no topo</span>
+          <span className="text-platinum-foreground">{tx("no topo")}</span>
         )}
-        {isWeak && <span className="font-medium text-amber-600">elo mais fraco</span>}
+        {isWeak && <span className="font-medium text-amber-600">{tx("elo mais fraco")}</span>}
       </div>
     </div>
   );
 }
 
 function ThresholdReference({ boardType }: { boardType: "scrum" | "kanban" }) {
+  const tx = useText();
   const ref = maturityReference(boardType); // fonte única (mesma do dashboard)
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Referência de maturidade — {boardType === "scrum" ? "Scrum" : "Kanban"}</CardTitle>
+        <CardTitle>{tx("Referência de maturidade —")}{" "}{boardType === "scrum" ? "Scrum" : "Kanban"}</CardTitle>
         <p className="text-sm text-muted-foreground">
-          O que leva a cada tier, em unidades naturais (dias, %). Valores propostos, a calibrar com dados de campo.
-        </p>
+          {tx("O que leva a cada tier, em unidades naturais (dias, %). Valores propostos, a calibrar com dados de campo.")}</p>
       </CardHeader>
       <CardContent>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <th className="pb-2 font-medium">Métrica</th>
+              <th className="pb-2 font-medium">{tx("Métrica")}</th>
               <th className="pb-2 font-medium text-platinum-foreground">Platinum</th>
               <th className="pb-2 font-medium text-gold-foreground">Gold</th>
               <th className="pb-2 font-medium text-silver-foreground">Silver</th>
@@ -264,11 +266,11 @@ function ThresholdReference({ boardType }: { boardType: "scrum" | "kanban" }) {
           </thead>
           <tbody>
             {ref.map((r) => (
-              <tr key={r.label} className="border-t border-border/60">
-                <td className="py-1.5 pr-2">{r.label}</td>
-                <td className="py-1.5 tabular-nums text-platinum-foreground">{r.platinum}</td>
-                <td className="py-1.5 tabular-nums text-gold-foreground">{r.gold}</td>
-                <td className="py-1.5 tabular-nums text-silver-foreground">{r.silver}</td>
+              <tr key={tx(r.label)} className="border-t border-border/60">
+                <td className="py-1.5 pr-2">{tx(r.label)}</td>
+                <td className="py-1.5 tabular-nums text-platinum-foreground">{tx(r.platinum)}</td>
+                <td className="py-1.5 tabular-nums text-gold-foreground">{tx(r.gold)}</td>
+                <td className="py-1.5 tabular-nums text-silver-foreground">{tx(r.silver)}</td>
               </tr>
             ))}
           </tbody>
@@ -301,24 +303,26 @@ function valueFor(section: string, field: string, v: string | null): string {
 }
 
 function HistoryEntryRow({ e, boardType }: { e: FieldHistoryRow; boardType: "scrum" | "kanban" }) {
-  const when = new Date(e.changed_at).toLocaleString("pt-BR", {
+  const tx = useText();
+  const locale = useLocale();
+  const when = new Date(e.changed_at).toLocaleString(locale, {
     day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
   });
   let change: React.ReactNode;
   if (e.field === "created") {
-    change = <span className="text-primary">criou «{e.entity_label}»</span>;
+    change = <span className="text-primary">{tx("criou «")}{e.entity_label}»</span>;
   } else if (e.field === "deleted") {
-    change = <span className="text-destructive line-through">removeu «{e.entity_label}»</span>;
+    change = <span className="text-destructive line-through">{tx("removeu «")}{e.entity_label}»</span>;
   } else {
-    const label = labelFor(e.section, e.field, boardType);
-    const oldV = valueFor(e.section, e.field, e.old_value);
-    const newV = valueFor(e.section, e.field, e.new_value);
+    const label = tx(labelFor(e.section, e.field, boardType));
+    const oldV = tx(valueFor(e.section, e.field, e.old_value));
+    const newV = tx(valueFor(e.section, e.field, e.new_value));
     if (e.old_value == null) {
-      change = (<><span className="text-muted-foreground">{label}:</span> <span className="text-primary">{newV}</span></>);
+      change = (<><span className="text-muted-foreground">{tx(label)}:</span> <span className="text-primary">{newV}</span></>);
     } else if (e.new_value == null) {
-      change = (<><span className="text-muted-foreground">{label}:</span> <span className="text-muted-foreground/60 line-through">{oldV}</span> <span className="text-muted-foreground">(limpo)</span></>);
+      change = (<><span className="text-muted-foreground">{tx(label)}:</span> <span className="text-muted-foreground/60 line-through">{oldV}</span> <span className="text-muted-foreground">{tx("(limpo)")}</span></>);
     } else {
-      change = (<><span className="text-muted-foreground">{label}:</span> <span className="text-muted-foreground/60 line-through">{oldV}</span> <span className="text-primary">→ {newV}</span></>);
+      change = (<><span className="text-muted-foreground">{tx(label)}:</span> <span className="text-muted-foreground/60 line-through">{oldV}</span> <span className="text-primary">→ {newV}</span></>);
     }
   }
   return (
@@ -331,13 +335,14 @@ function HistoryEntryRow({ e, boardType }: { e: FieldHistoryRow; boardType: "scr
         {change}
       </span>
       <span className="shrink-0 text-[11px] text-muted-foreground/60">
-        {e.changed_by} · {SECTION_LABEL[e.section] ?? e.section}
+        {e.changed_by} · {tx(SECTION_LABEL[e.section] ?? e.section)}
       </span>
     </li>
   );
 }
 
 function HistoryPanel({ entries, boardType }: { entries: FieldHistoryRow[]; boardType: "scrum" | "kanban" }) {
+  const tx = useText();
   const [open, setOpen] = React.useState(false);
   if (entries.length === 0) return null;
   return (
@@ -347,15 +352,14 @@ function HistoryPanel({ entries, boardType }: { entries: FieldHistoryRow[]; boar
         className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
-        Histórico de mudanças ({entries.length}) {open ? "" : "— mostrar"}
+        {tx("Histórico de mudanças (")}{entries.length}) {open ? "" : tx("— mostrar")}
       </button>
       {open && (
         <Card className="mt-3">
           <CardHeader>
-            <CardTitle>Histórico de mudanças</CardTitle>
+            <CardTitle>{tx("Histórico de mudanças")}</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Só o que mudou de fato — cada linha é um valor alterado (de → para), com autor e data.
-            </p>
+              {tx("Só o que mudou de fato — cada linha é um valor alterado (de → para), com autor e data.")}</p>
           </CardHeader>
           <CardContent>
             <ul className="divide-y divide-border/50">

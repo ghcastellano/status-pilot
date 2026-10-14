@@ -1,3 +1,6 @@
+"use client";
+import { useLang } from "@/components/lang-context";
+import { formatNumber } from "@/lib/locales/translate";
 import { Sparkles } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -12,6 +15,7 @@ interface KpiCardProps {
 }
 
 export function KpiCard({ label, value, unit, sub, accent, insight }: KpiCardProps) {
+  const { lang } = useLang();
   return (
     <Card className="flex flex-col p-5">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -24,7 +28,7 @@ export function KpiCard({ label, value, unit, sub, accent, insight }: KpiCardPro
             accent && "text-primary"
           )}
         >
-          {value}
+          {typeof value === "number" ? formatNumber(value, lang) : value}
         </span>
         {unit && <span className="text-sm font-medium text-muted-foreground">{unit}</span>}
       </div>

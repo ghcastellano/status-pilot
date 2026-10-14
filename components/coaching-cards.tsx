@@ -1,4 +1,5 @@
 "use client";
+import { useText, useLocale } from "@/components/lang-context";
 
 /**
  * Cards da camada de coaching (tela de detalhe): plano, experimentos e sinais
@@ -41,11 +42,12 @@ function useFlash(): [string | null, (k: string, ok?: boolean) => void, boolean]
 }
 
 function SavedTick({ current, k, ok }: { current: string | null; k: string; ok: boolean }) {
+  const tx = useText();
   if (current !== k) return null;
   return ok ? (
-    <span className="text-xs font-medium text-primary">✓ salvo</span>
+    <span className="text-xs font-medium text-primary">{tx("✓ salvo")}</span>
   ) : (
-    <span className="text-xs font-medium text-destructive">⚠ não salvo</span>
+    <span className="text-xs font-medium text-destructive">{tx("⚠ não salvo")}</span>
   );
 }
 
@@ -59,16 +61,17 @@ export function getAuthor(): string {
 
 /** Campo "Você: [nome]" — quem está registrando comentários e mudanças. */
 export function AuthorField() {
+  const tx = useText();
   const [name, setName] = React.useState("");
   React.useEffect(() => {
     setName(window.localStorage.getItem(AUTHOR_KEY) || "");
   }, []);
   return (
     <label className="flex items-center gap-2 text-xs text-muted-foreground">
-      <span className="whitespace-nowrap">Registrando como</span>
+      <span className="whitespace-nowrap">{tx("Registrando como")}</span>
       <Input
         className="h-8 w-44 text-sm"
-        placeholder="seu nome (ex.: Ana, coach)"
+        placeholder={tx("seu nome (ex.: Ana, coach)")}
         value={name}
         onChange={(e) => {
           setName(e.target.value);
@@ -79,7 +82,7 @@ export function AuthorField() {
   );
 }
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, locale: string): string {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
   if (s < 60) return "agora";
   const m = Math.round(s / 60);
@@ -88,7 +91,7 @@ function timeAgo(iso: string): string {
   if (h < 24) return `${h}h`;
   const d = Math.round(h / 24);
   if (d < 30) return `${d}d`;
-  return new Date(iso).toLocaleDateString("pt-BR");
+  return new Date(iso).toLocaleDateString(locale);
 }
 
 // ── Thread de comentários de um experimento (log que evolui no tempo) ──
@@ -101,6 +104,8 @@ function CommentThread({
   onAdd: (body: string) => Promise<boolean>;
   onDelete: (id: number) => void;
 }) {
+  const tx = useText();
+  const locale = useLocale();
   const [open, setOpen] = React.useState(false);
   const [text, setText] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -122,7 +127,7 @@ function CommentThread({
         className="flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <MessageSquare className="h-3.5 w-3.5" />
-        {n === 0 ? "Comentar" : `${n} comentário${n > 1 ? "s" : ""}`}
+        {n === 0 ? tx("Comentar") : tx(`${n} comentário${n > 1 ? "s" : ""}`)}
       </button>
       {open && (
         <div className="mt-2 space-y-2 border-l-2 border-border/60 pl-3">
@@ -130,10 +135,10 @@ function CommentThread({
             <div key={c.id} className="group text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-foreground/90">{c.author}</span>
-                <span className="text-muted-foreground/70">· {timeAgo(c.created_at)}</span>
+                <span className="text-muted-foreground/70">· {tx(timeAgo(c.created_at, locale))}</span>
                 <button
                   onClick={() => onDelete(c.id)}
-                  aria-label="Excluir comentário"
+                  aria-label={tx("Excluir comentário")}
                   className="ml-auto text-muted-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                 >
                   <X className="h-3 w-3" />
@@ -145,7 +150,7 @@ function CommentThread({
           <div className="flex items-center gap-1.5">
             <Input
               className="h-8 flex-1 text-xs"
-              placeholder="Adicionar comentário — o que aconteceu?"
+              placeholder={tx("Adicionar comentário — o que aconteceu?")}
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
@@ -153,8 +158,7 @@ function CommentThread({
               }}
             />
             <Button size="sm" variant="secondary" disabled={!text.trim() || busy} onClick={submit}>
-              Enviar
-            </Button>
+              {tx("Enviar")}</Button>
           </div>
         </div>
       )}
@@ -171,6 +175,7 @@ const PLAN_FIELDS: { key: keyof CoachingPlan; label: string; placeholder: string
 ];
 
 export function PlanCard({ teamId, initial }: { teamId: string; initial: CoachingPlan | null }) {
+  const tx = useText();
   const demo = useDemo();
   const [plan, setPlan] = React.useState<Partial<CoachingPlan>>(initial ?? {});
   const [flashKey, flash, flashOk] = useFlash();
@@ -193,21 +198,21 @@ export function PlanCard({ teamId, initial }: { teamId: string; initial: Coachin
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Plano de coaching</CardTitle>
-        <p className="text-sm text-muted-foreground">{demo ? "Sample plan · read-only" : "Salva automaticamente ao sair do campo."}</p>
+        <CardTitle>{tx("Plano de coaching")}</CardTitle>
+        <p className="text-sm text-muted-foreground">{demo ? "Sample plan · read-only" : tx("Salva automaticamente ao sair do campo.")}</p>
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">
         {PLAN_FIELDS.map((f) => (
           <div key={f.key} className={f.key === "main_gap" ? "sm:col-span-2" : undefined}>
             <div className="mb-1 flex items-center gap-2">
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {f.label}
+                {tx(f.label)}
               </span>
               <SavedTick current={flashKey} k={f.key} ok={flashOk} />
             </div>
             <Input
               className={cn("h-10", f.tone)}
-              placeholder={f.placeholder}
+              placeholder={tx(f.placeholder)}
               defaultValue={(plan[f.key] as string) ?? ""}
               onBlur={(e) => {
                 if ((e.target.value || "") !== ((plan[f.key] as string) ?? "")) save(f.key, e.target.value);
@@ -218,8 +223,7 @@ export function PlanCard({ teamId, initial }: { teamId: string; initial: Coachin
         <div>
           <div className="mb-1 flex items-center gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Próximo check-in
-            </span>
+              {tx("Próximo check-in")}</span>
             <SavedTick current={flashKey} k="review_at" ok={flashOk} />
           </div>
           <Input
@@ -254,6 +258,7 @@ export function ExperimentsCard({
   initial: Experiment[];
   initialComments?: ExperimentComment[];
 }) {
+  const tx = useText();
   const [exps, setExps] = React.useState<Experiment[]>(initial);
   const [comments, setComments] = React.useState<ExperimentComment[]>(initialComments);
   const [newBehavior, setNewBehavior] = React.useState("");
@@ -361,20 +366,19 @@ export function ExperimentsCard({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Experimentos &amp; intervenções</CardTitle>
+          <CardTitle>{tx("Experimentos & intervenções")}</CardTitle>
           <SavedTick current={flashKey} k="add" ok={flashOk} />
         </div>
         <p className="text-sm text-muted-foreground">
-          O que está sendo testado para mover as métricas — e o que mudou.
-        </p>
+          {tx("O que está sendo testado para mover as métricas — e o que mudou.")}</p>
       </CardHeader>
       <CardContent className="space-y-4">
         {exps.length === 0 && (
-          <p className="text-sm text-muted-foreground">Nenhum experimento ainda — comece por uma sugestão abaixo.</p>
+          <p className="text-sm text-muted-foreground">{tx("Nenhum experimento ainda — comece por uma sugestão abaixo.")}</p>
         )}
         {[
-          { label: "Ativos", items: active },
-          { label: "Encerrados", items: closed },
+          { label: tx("Ativos"), items: active },
+          { label: tx("Encerrados"), items: closed },
         ].map((g) =>
           g.items.length === 0 ? null : (
             <div key={g.label}>
@@ -394,14 +398,14 @@ export function ExperimentsCard({
                       <div className="min-w-0">
                         <p className="text-sm font-medium leading-snug">{e.behavior}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          {PILLAR_LABEL[e.pillar]}
+                          {tx(PILLAR_LABEL[e.pillar])}
                           {e.metric ? ` · ${e.metric}` : ""}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
                         <SavedTick current={flashKey} k={`exp:${e.id}`} ok={flashOk} />
                         <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", STATUS_META[e.status].chip)}>
-                          {STATUS_META[e.status].label}
+                          {tx(STATUS_META[e.status].label)}
                         </span>
                         {e.status === "active" && (
                           <>
@@ -409,19 +413,17 @@ export function ExperimentsCard({
                               onClick={() => update(e, { status: "done" })}
                               className="rounded px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/10"
                             >
-                              Concluir
-                            </button>
+                              {tx("Concluir")}</button>
                             <button
                               onClick={() => update(e, { status: "dropped" })}
                               className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted"
                             >
-                              Descartar
-                            </button>
+                              {tx("Descartar")}</button>
                           </>
                         )}
                         <button
                           onClick={() => remove(e)}
-                          aria-label="Excluir experimento"
+                          aria-label={tx("Excluir experimento")}
                           className="rounded p-0.5 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive"
                         >
                           <X className="h-3.5 w-3.5" />
@@ -431,7 +433,7 @@ export function ExperimentsCard({
                     {e.status !== "dropped" && (
                       <Input
                         className="mt-2 h-8 text-xs"
-                        placeholder="Resultado — o que mudou?"
+                        placeholder={tx("Resultado — o que mudou?")}
                         defaultValue={e.outcome ?? ""}
                         onBlur={(ev) => {
                           if ((ev.target.value || "") !== (e.outcome ?? "")) update(e, { outcome: ev.target.value || null });
@@ -457,17 +459,17 @@ export function ExperimentsCard({
               value={newPillar}
               onChange={(e) => setNewPillar(e.target.value as Pillar)}
               className="h-10 rounded-md border border-input bg-background px-2 text-sm"
-              aria-label="Pilar"
+              aria-label={tx("Pilar")}
             >
               {(Object.keys(PILLAR_LABEL) as Pillar[]).map((p) => (
                 <option key={p} value={p}>
-                  {PILLAR_LABEL[p]}
+                  {tx(PILLAR_LABEL[p])}
                 </option>
               ))}
             </select>
             <Input
               className="h-10 flex-1"
-              placeholder="Novo experimento — comportamento a testar"
+              placeholder={tx("Novo experimento — comportamento a testar")}
               value={newBehavior}
               onChange={(e) => setNewBehavior(e.target.value)}
               onKeyDown={(e) => {
@@ -485,19 +487,18 @@ export function ExperimentsCard({
                 setNewBehavior("");
               }}
             >
-              <Plus className="h-4 w-4" /> Adicionar
-            </Button>
+              <Plus className="h-4 w-4" /> {tx("Adicionar")}</Button>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Sugestões ({boardType}):</span>
+            <span className="text-xs text-muted-foreground">{tx("Sugestões (")}{boardType}):</span>
             {templates.map((tpl) => (
               <button
                 key={tpl.behavior}
                 onClick={() => add(tpl)}
-                title={tpl.hypothesis}
+                title={tx(tpl.hypothesis)}
                 className="rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
               >
-                + {tpl.metric}
+                + {tx(tpl.metric)}
               </button>
             ))}
           </div>
@@ -527,6 +528,7 @@ export function SignalsCard({
   initialSignals: Record<string, string>;
   initialNote: string | null;
 }) {
+  const tx = useText();
   const [signals, setSignals] = React.useState<Record<string, string>>(initialSignals);
   const [flashKey, flash, flashOk] = useFlash();
   const defs = signalDefs(boardType);
@@ -553,22 +555,21 @@ export function SignalsCard({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
-          <CardTitle>Sinais comportamentais</CardTitle>
+          <CardTitle>{tx("Sinais comportamentais")}</CardTitle>
           <span className={cn("text-sm font-semibold", meta.tone)}>
-            {meta.label}
+            {tx(meta.label)}
             {readiness.pct != null ? ` · ${readiness.pct}%` : ""}
           </span>
         </div>
         <p className="text-sm text-muted-foreground">
-          Pilar Ownership — avaliação do coach; não entra no tier quantitativo.
-        </p>
+          {tx("Pilar Ownership — avaliação do coach; não entra no tier quantitativo.")}</p>
       </CardHeader>
       <CardContent className="space-y-2.5">
         {defs.map((d) => {
           const current = signals[d.key] as SignalValue | undefined;
           return (
             <div key={d.key} className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm">{d.label}</span>
+              <span className="text-sm">{tx(d.label)}</span>
               <div className="flex items-center gap-2">
                 <SavedTick current={flashKey} k={d.key} ok={flashOk} />
                 <div className="inline-flex overflow-hidden rounded-md border border-border">
@@ -582,7 +583,7 @@ export function SignalsCard({
                         current === v ? VALUE_ACTIVE[v] : "text-muted-foreground hover:bg-muted"
                       )}
                     >
-                      {RUBRIC[v].label}
+                      {tx(RUBRIC[v].label)}
                     </button>
                   ))}
                 </div>
@@ -594,17 +595,16 @@ export function SignalsCard({
         {/* Gate de graduação */}
         <div className="mt-2 flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2.5">
           <div>
-            <p className="text-sm font-medium">Gate de graduação</p>
-            <p className="text-xs text-muted-foreground">métricas em Gold+ e sinais ≥ 75%</p>
+            <p className="text-sm font-medium">{tx("Gate de graduação")}</p>
+            <p className="text-xs text-muted-foreground">{tx("métricas em Gold+ e sinais ≥ 75%")}</p>
           </div>
           {gradReady == null ? (
-            <Badge variant="secondary">avaliar sinais</Badge>
+            <Badge variant="secondary">{tx("avaliar sinais")}</Badge>
           ) : gradReady ? (
             <Badge variant="platinum" className="font-semibold">
-              Pronto para revisão
-            </Badge>
+              {tx("Pronto para revisão")}</Badge>
           ) : (
-            <Badge variant="secondary">Ainda não</Badge>
+            <Badge variant="secondary">{tx("Ainda não")}</Badge>
           )}
         </div>
       </CardContent>

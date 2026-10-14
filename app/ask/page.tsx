@@ -1,4 +1,5 @@
 "use client";
+import { useText, useLang, useLocale } from "@/components/lang-context";
 
 import { useDemo } from "@/components/demo-workspace";
 import * as React from "react";
@@ -45,8 +46,8 @@ function persistEntry(entry: AskEntry, prev: AskEntry[], storageKey: string): As
   return updated;
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString("pt-BR", {
+function fmtDate(iso: string, locale: string) {
+  return new Date(iso).toLocaleString(locale, {
     day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
   });
 }
@@ -54,13 +55,15 @@ function fmtDate(iso: string) {
 // ── Chip de pergunta recente ──────────────────────────────────────────────────
 
 function QuestionChip({ label, onClick, disabled }: { label: string; onClick: () => void; disabled: boolean }) {
+  const tx = useText();
+  const locale = useLocale();
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-50 text-left"
     >
-      {label}
+      {tx(label)}
     </button>
   );
 }
@@ -74,6 +77,8 @@ function HistoryItem({
   onReask: (q: string) => void;
   loading: boolean;
 }) {
+  const tx = useText();
+  const locale = useLocale();
   const [expanded, setExpanded] = React.useState(false);
   return (
     <div className="rounded-lg border border-border bg-card/50 text-sm">
@@ -91,7 +96,7 @@ function HistoryItem({
             {entry.teamName && <span>{entry.teamName}</span>}
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {fmtDate(entry.askedAt)}
+              {fmtDate(entry.askedAt, locale)}
             </span>
           </div>
           {!expanded && (
@@ -104,11 +109,10 @@ function HistoryItem({
           className="h-7 shrink-0 gap-1 px-2 text-xs"
           disabled={loading}
           onClick={(e) => { e.stopPropagation(); onReask(entry.question); }}
-          title="Refazer esta pergunta"
+          title={tx("Refazer esta pergunta")}
         >
           <RotateCcw className="h-3.5 w-3.5" />
-          Refazer
-        </Button>
+          {tx("Refazer")}</Button>
       </button>
       {/* Resposta expandida */}
       {expanded && (
@@ -123,9 +127,12 @@ function HistoryItem({
 // ── Página principal ──────────────────────────────────────────────────────────
 
 export default function AskPage() {
+  const tx = useText();
+  const locale = useLocale();
   const { selectedTeam } = useTeam();
   const demo = useDemo();
-  const storageKey = demo ? `${STORAGE_KEY}:demo:v1` : STORAGE_KEY;
+  const { lang } = useLang();
+  const storageKey = `${demo ? `${STORAGE_KEY}:demo:v1` : STORAGE_KEY}:${lang}`;
   const [q, setQ] = React.useState("");
   const [answer, setAnswer] = React.useState<string | null>(null);
   const [cached, setCached] = React.useState(false);
@@ -138,6 +145,8 @@ export default function AskPage() {
   // Carrega histórico apenas no cliente
   React.useEffect(() => {
     setHistory(loadHistory(storageKey));
+    setAnswer(null);
+    setError(null);
   }, [storageKey]);
 
   // Chips: últimas 5 perguntas únicas do histórico; fallback nos exemplos estáticos
@@ -165,10 +174,10 @@ export default function AskPage() {
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamId: selectedTeam.id, question, sessionId: getSessionId() }),
+        body: JSON.stringify({ teamId: selectedTeam.id, lang, question, sessionId: getSessionId() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Falha ao perguntar.");
+      if (!res.ok) throw new Error(data.error ?? tx("Falha ao perguntar."));
       setAnswer(data.answer);
       setCached(!!data.cached);
       if (typeof data.remaining === "number") setRemaining(data.remaining);
@@ -197,17 +206,16 @@ export default function AskPage() {
     ask(text);
   }
 
-  const chipsLabel = history.length > 0 ? "Recentes" : "Sugestões";
+  const chipsLabel = history.length > 0 ? tx("Recentes") : tx("Sugestões");
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Perguntar</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{tx("Perguntar")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {demo ? "Demonstração: explore uma análise ilustrativa dos dados fictícios. As respostas não são geradas por IA ao vivo." : <>Pergunte em linguagem natural — a IA responde considerando{" "}
-          <span className="font-medium">os dois times</span> (Espresso e Cold Brew), lidos do Jira.
-          Dá pra comparar.</>}
+          {demo ? tx("Demonstração: explore uma análise ilustrativa dos dados fictícios. As respostas não são geradas por IA ao vivo.") : <>{tx("Pergunte em linguagem natural — a IA responde considerando")}{" "}{" "}
+          <span className="font-medium">{tx("os dois times")}</span> {tx("(Espresso e Cold Brew), lidos do Jira. Dá pra comparar.")}</>}
         </p>
       </div>
 
@@ -220,13 +228,12 @@ export default function AskPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           maxLength={500}
-          placeholder="Ex.: como está a sprint atual?"
+          placeholder={tx("Ex.: como está a sprint atual?")}
           disabled={loading}
         />
         <Button type="submit" disabled={loading || !q.trim()}>
           <Send className="h-4 w-4" />
-          Perguntar
-        </Button>
+          {tx("Perguntar")}</Button>
       </form>
 
       {/* Chips dinâmicos */}
@@ -246,16 +253,14 @@ export default function AskPage() {
             {loading && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Sparkles className="h-4 w-4 animate-pulse text-primary" />
-                Analisando os dados…
-              </div>
+                {tx("Analisando os dados…")}</div>
             )}
             {error && <p className="text-sm text-destructive">{error}</p>}
             {answer && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Badge variant="default">
-                    <Sparkles className="mr-1 h-3 w-3" /> Resposta
-                  </Badge>
+                    <Sparkles className="mr-1 h-3 w-3" /> {tx("Resposta")}</Badge>
                   {cached && (
                     <Badge variant="secondary">
                       <Database className="mr-1 h-3 w-3" /> cache
@@ -271,8 +276,7 @@ export default function AskPage() {
 
       {remaining !== null && (
         <p className="text-right text-xs text-muted-foreground">
-          {remaining} perguntas restantes nesta sessão
-        </p>
+          {remaining} {tx("perguntas restantes nesta sessão")}</p>
       )}
 
       {/* Histórico de Q&A */}
@@ -283,8 +287,7 @@ export default function AskPage() {
             className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             <Clock className="h-4 w-4" />
-            Histórico de perguntas
-            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+            {tx("Histórico de perguntas")}{" "}<Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
               {history.length}
             </Badge>
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showHistory ? "rotate-180" : ""}`} />

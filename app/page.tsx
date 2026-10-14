@@ -1,4 +1,5 @@
 "use client";
+import { useText } from "@/components/lang-context";
 
 import { DemoLauncher, useDemo } from "@/components/demo-workspace";
 import * as React from "react";
@@ -34,6 +35,7 @@ function ChartNote({ text }: { text?: string }) {
 }
 
 export default function DashboardPage() {
+  const tx = useText();
   const demo = useDemo();
   const t = useT();
   const { lang } = useLang();
@@ -105,11 +107,12 @@ export default function DashboardPage() {
       })
       .catch((e) => setErr(e.message))
       .finally(() => setLoading(false));
-  }, [selectedTeam, epic, type, weeks, sprint, refresh]);
+  }, [selectedTeam, epic, type, weeks, sprint, refresh, lang]);
 
   // insight automático — refaz sempre que time ou filtros mudam
   React.useEffect(() => {
     if (!selectedTeam) return;
+    let active = true;
     setInsightLoading(true);
     setInsights(null);
     fetch("/api/insights", {
@@ -117,6 +120,7 @@ export default function DashboardPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         teamId: selectedTeam.id,
+        lang,
         epic: epic !== "all" ? epic : undefined,
         type: type !== "all" ? type : undefined,
         weeks: Number(weeks),
@@ -124,10 +128,11 @@ export default function DashboardPage() {
       }),
     })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => setInsights(d.insights))
-      .catch(() => setInsights(null))
-      .finally(() => setInsightLoading(false));
-  }, [selectedTeam, epic, type, weeks, sprint, refresh]);
+      .then((d) => active && setInsights(d.insights))
+      .catch(() => active && setInsights(null))
+      .finally(() => active && setInsightLoading(false));
+    return () => { active = false; };
+  }, [selectedTeam, epic, type, weeks, sprint, refresh, lang]);
 
   React.useEffect(() => {
     setEpic("all");
@@ -146,7 +151,7 @@ export default function DashboardPage() {
         body: JSON.stringify(selectedTeam ? { teamId: selectedTeam.id } : {}),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Falha no sync");
+      if (!res.ok) throw new Error(data.error ?? tx("Falha no sync"));
       setSyncMsg(t(`${data.total} itens sincronizados`, `${data.total} items synced`));
       setRefresh((x) => x + 1);
     } catch (e) {
@@ -206,11 +211,10 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{m.team.name}</h1>
             {m.team.jira_board_id ? (
-              <Badge variant="secondary" title="Dados reais do Jira (issues, sprints e changelog), salvos no banco.">
-                Jira · dados reais
-              </Badge>
+              <Badge variant="secondary" title={tx("Dados reais do Jira (issues, sprints e changelog), salvos no banco.")}>
+                {tx("Jira · dados reais")}</Badge>
             ) : (
-              <Badge variant="secondary" title="Time de demonstração — linha do tempo sintética.">
+              <Badge variant="secondary" title={tx("Time de demonstração — linha do tempo sintética.")}>
                 demo
               </Badge>
             )}
@@ -219,16 +223,16 @@ export default function DashboardPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={epic} onValueChange={setEpic}>
-            <SelectTrigger className="w-44"><SelectValue placeholder="Épico" /></SelectTrigger>
+            <SelectTrigger className="w-44"><SelectValue placeholder={tx("Épico")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos os épicos</SelectItem>
+              <SelectItem value="all">{tx("Todos os épicos")}</SelectItem>
               {m.availableFilters.epics.map((e: any) => <SelectItem key={e.key} value={e.key}>{e.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={type} onValueChange={setType}>
-            <SelectTrigger className="w-32"><SelectValue placeholder="Tipo" /></SelectTrigger>
+            <SelectTrigger className="w-32"><SelectValue placeholder={tx("Tipo")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos os tipos</SelectItem>
+              <SelectItem value="all">{tx("Todos os tipos")}</SelectItem>
               {m.availableFilters.types.map((t: string) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -248,7 +252,7 @@ export default function DashboardPage() {
           ) : (
             <Select value={weeks} onValueChange={setWeeks}>
               <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-              <SelectContent>{PERIODS.map((p) => <SelectItem key={p.v} value={p.v}>{p.label}</SelectItem>)}</SelectContent>
+              <SelectContent>{PERIODS.map((p) => <SelectItem key={p.v} value={p.v}>{tx(p.label)}</SelectItem>)}</SelectContent>
             </Select>
           )}
           <Button variant="outline" onClick={doSync} disabled={syncing || demo}>
@@ -291,7 +295,7 @@ export default function DashboardPage() {
               insight={activeSprintSelected ? undefined : insights?.secondary}
             />
           ) : (
-            <KpiCard label={t("Throughput", "Throughput")} value={f.throughput.perWeekAvg} unit="/sem" sub={t("itens concluídos", "items done")} insight={insights?.secondary} />
+            <KpiCard label={t("Throughput", "Throughput")} value={f.throughput.perWeekAvg} unit={tx("/sem")} sub={t("itens concluídos", "items done")} insight={insights?.secondary} />
           )}
           <KpiCard label={t("Eficiência de fluxo", "Flow efficiency")} value={Math.round(f.flowEfficiency * 100)} unit="%" sub={t("ativo ÷ total", "active ÷ total")} insight={insights?.flowEfficiency} />
           {isScrum ? (

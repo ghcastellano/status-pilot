@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
+  const lang = body?.lang === "en" ? "en" : "pt";
   const { teamId, epic, type, weeks, sprintId } = body ?? {};
   if (!isValidTeamId(teamId)) {
     return NextResponse.json({ error: "Time inválido." }, { status: 400 });
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   // chave de cache inclui filtros — cada combinação tem seu próprio insight
   const filterSuffix = [epic ?? "all", type ?? "all", String(weeks ?? 12), sprintId ?? "all"].join("|");
-  const cacheKey = `${INSIGHT_KEY}_${filterSuffix}`;
+  const cacheKey = `${INSIGHT_KEY}_${lang}_${filterSuffix}`;
 
   try {
     const cached = await getCachedAnswer(teamId, cacheKey);
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
       sprintId: sprintId && sprintId !== "all" ? sprintId : undefined,
     });
     const bundle = computeAnalysisBundle(metrics, issues, epicNames);
-    const insights = await generateMetricInsights(bundle);
+    const insights = await generateMetricInsights(bundle, lang);
 
     // só cacheia se veio conteúdo (não cacheia fallback vazio → próximo load tenta de novo)
     if (Object.values(insights).some((v) => v)) {

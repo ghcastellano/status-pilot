@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
 
+  const lang = body?.lang === "en" ? "en" : "pt";
   const { teamId, question, sessionId } = body ?? {};
   if (!isValidTeamId(teamId)) {
     return NextResponse.json({ error: "Time inválido." }, { status: 400 });
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // 1) cache primeiro — hit não gasta LLM nem cota (chave versionada: v2_)
-    const norm = "v2_" + normalizeForCache(v.value);
+    const norm = `v3_${lang}_` + normalizeForCache(v.value);
     const cached = await getCachedAnswer(teamId, norm);
     if (cached) return NextResponse.json({ answer: cached, cached: true });
 
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
       const bundle = computeAnalysisBundle(metrics, issues, epicNames);
       list.push({ metrics, bundle });
     }
-    const answer = await answerAcrossTeams(list, v.value);
+    const answer = await answerAcrossTeams(list, v.value, lang);
 
     await setCachedAnswer(teamId, norm, answer);
     return NextResponse.json({ answer, cached: false, remaining: rl.remaining });

@@ -1,4 +1,5 @@
 "use client";
+import { useMetricDisplay, useText, useLocale } from "@/components/lang-context";
 
 /**
  * Seção de Maturidade do Dashboard de cada time (Scrum ou Kanban).
@@ -79,20 +80,22 @@ export function DashboardMaturity({ data: initial }: { data: DashboardMaturityDa
 
 // ── A) Nível de maturidade ────────────────────────────────────────────
 function MaturityLevelPanel({ team, mat, m, history }: { team: DashboardMaturityData["team"]; mat: MaturityResult; m: any; history: MaturityWeek[] }) {
+  const tx = useText();
+  const locale = useLocale();
   const isScrum = team.board_type === "scrum";
   const basis = isScrum
-    ? `${m.scrum?.closedSprintCount ?? 0} sprints fechadas`
-    : `${history.length || 12} semanas`;
+    ? tx(`${m.scrum?.closedSprintCount ?? 0} sprints fechadas`)
+    : tx(`${history.length || 12} semanas`);
   const lastAsOf = history.length ? history[history.length - 1].as_of : null;
 
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <CardTitle className="text-lg">Nível de Maturidade do Time</CardTitle>
+          <CardTitle className="text-lg">{tx("Nível de Maturidade do Time")}</CardTitle>
           <div className="text-right text-xs text-muted-foreground">
-            <span>Base: {basis}</span>
-            {lastAsOf && <div>Última análise: {new Date(lastAsOf + "T00:00:00Z").toLocaleDateString("pt-BR")}</div>}
+            <span>{tx("Base:")}{" "}{basis}</span>
+            {lastAsOf && <div>{tx("Última análise:")}{" "}{new Date(lastAsOf + "T00:00:00Z").toLocaleDateString(locale)}</div>}
           </div>
         </div>
       </CardHeader>
@@ -109,27 +112,26 @@ function MaturityLevelPanel({ team, mat, m, history }: { team: DashboardMaturity
                 <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-muted text-lg text-muted-foreground">—</div>
               )}
               <div>
-                <p className={cn("text-xl font-bold", tierTextClass(mat.tier))}>{mat.tierName ?? "Sem dados"}</p>
-                <p className="text-sm text-muted-foreground">{mat.tierDesc}</p>
+                <p className={cn("text-xl font-bold", tierTextClass(mat.tier))}>{mat.tierName ?? tx("Sem dados")}</p>
+                <p className="text-sm text-muted-foreground">{tx(mat.tierDesc)}</p>
               </div>
             </div>
             {mat.tier && (
               <div className="mt-3 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-                <span className="font-semibold text-foreground/80">Modelo de suporte:</span> {SUPPORT_MODEL[mat.tier]}
+                <span className="font-semibold text-foreground/80">{tx("Modelo de suporte:")}</span> {tx(SUPPORT_MODEL[mat.tier])}
               </div>
             )}
-            {mat.note && <p className="mt-2 text-xs text-amber-600">⚠ {mat.note}</p>}
+            {mat.note && <p className="mt-2 text-xs text-amber-600">⚠ {tx(mat.note)}</p>}
             <p className="mt-2 text-[11px] text-muted-foreground/80">
-              O tier é o elo mais fraco (weakest-link) entre as métricas quantitativas. Ownership é comportamental e não entra no tier.
-            </p>
+              {tx("O tier é o elo mais fraco (weakest-link) entre as métricas quantitativas. Ownership é comportamental e não entra no tier.")}</p>
           </div>
           {/* Histórico */}
           <div>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">Maturidade — últimas {history.length} {isScrum ? "sprints" : "semanas"}</p>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">{tx("Maturidade — últimas")}{" "}{history.length} {isScrum ? "sprints" : tx("semanas")}</p>
             {history.length > 0 ? (
               <MaturityHistoryChart data={history} />
             ) : (
-              <p className="py-8 text-center text-sm text-muted-foreground">Sem histórico ainda.</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">{tx("Sem histórico ainda.")}</p>
             )}
           </div>
         </div>
@@ -146,6 +148,8 @@ function MaturityLevelPanel({ team, mat, m, history }: { team: DashboardMaturity
 }
 
 function MetricKpi({ mt }: { mt: MetricEval }) {
+  const tx = useText();
+  const metricDisplay = useMetricDisplay();
   const { lang } = useLang();
   const chip = mt.tier ? TIER_META[mt.tier] : null;
   return (
@@ -160,9 +164,9 @@ function MetricKpi({ mt }: { mt: MetricEval }) {
           <Badge variant="secondary" className="shrink-0 text-[9px]">—</Badge>
         )}
       </div>
-      <div className={cn("mt-1 text-2xl font-bold tabular-nums", tierTextClass(mt.tier))}>{mt.display}</div>
+      <div className={cn("mt-1 text-2xl font-bold tabular-nums", tierTextClass(mt.tier))}>{metricDisplay(mt.display)}</div>
       <p className="mt-0.5 text-[11px] text-muted-foreground">
-        {mt.tier == null ? "sem dados" : mt.nextTarget ? `Meta: ${mt.nextTarget}` : "no topo ✓"}
+        {mt.tier == null ? tx("sem dados") : mt.nextTarget ? tx(`Meta: ${mt.nextTarget}`) : tx("no topo ✓")}
       </p>
     </div>
   );
@@ -170,6 +174,7 @@ function MetricKpi({ mt }: { mt: MetricEval }) {
 
 // ── B) Referência de maturidade ───────────────────────────────────────
 function ReferencePanel({ boardType }: { boardType: "scrum" | "kanban" }) {
+  const tx = useText();
   const ref = maturityReference(boardType);
   const cols: { tier: Tier; key: "silver" | "gold" | "platinum" }[] = [
     { tier: 1, key: "silver" },
@@ -181,8 +186,8 @@ function ReferencePanel({ boardType }: { boardType: "scrum" | "kanban" }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">📖 Referência de Maturidade — {boardType === "scrum" ? "Scrum" : "Kanban"}</CardTitle>
-        <p className="text-sm text-muted-foreground">O que leva o time a cada tier. Valores propostos, ainda a calibrar.</p>
+        <CardTitle className="text-lg">{tx("📖 Referência de Maturidade —")}{" "}{boardType === "scrum" ? "Scrum" : "Kanban"}</CardTitle>
+        <p className="text-sm text-muted-foreground">{tx("O que leva o time a cada tier. Valores propostos, ainda a calibrar.")}</p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-3">
@@ -194,14 +199,14 @@ function ReferencePanel({ boardType }: { boardType: "scrum" | "kanban" }) {
                   <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold", BADGE_BG[meta.token])}>{tier}</span>
                   <div>
                     <p className={cn("text-sm font-bold", tierTextClass(tier))}>{meta.name}</p>
-                    <p className="text-[11px] text-muted-foreground">{meta.desc}</p>
+                    <p className="text-[11px] text-muted-foreground">{tx(meta.desc)}</p>
                   </div>
                 </div>
                 <ul className="space-y-1.5">
                   {ref.map((r) => (
-                    <li key={r.label} className="flex items-center justify-between gap-2 rounded bg-background/60 px-2 py-1 text-xs">
-                      <span className="text-muted-foreground">{r.label}</span>
-                      <span className="shrink-0 font-medium tabular-nums">{r[key]}</span>
+                    <li key={tx(r.label)} className="flex items-center justify-between gap-2 rounded bg-background/60 px-2 py-1 text-xs">
+                      <span className="text-muted-foreground">{tx(r.label)}</span>
+                      <span className="shrink-0 font-medium tabular-nums">{tx(r[key])}</span>
                     </li>
                   ))}
                 </ul>
@@ -212,15 +217,14 @@ function ReferencePanel({ boardType }: { boardType: "scrum" | "kanban" }) {
 
         {/* Medidas subjetivas (Ownership comportamental) */}
         <div className="rounded-lg border border-border bg-muted/30 p-4">
-          <p className="text-sm font-semibold">Medidas subjetivas (Ownership)</p>
+          <p className="text-sm font-semibold">{tx("Medidas subjetivas (Ownership)")}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Sinais qualitativos observados no dia a dia — avaliados pelo coach, não entram no tier quantitativo.
-          </p>
+            {tx("Sinais qualitativos observados no dia a dia — avaliados pelo coach, não entram no tier quantitativo.")}</p>
           <ul className="mt-2 grid gap-x-6 gap-y-1 text-sm text-foreground/80 sm:grid-cols-2">
             {signals.map((s) => (
               <li key={s.key} className="flex items-center gap-1.5">
                 <span className="h-1 w-1 rounded-full bg-muted-foreground/50" />
-                {s.label}
+                {tx(s.label)}
               </li>
             ))}
           </ul>
@@ -232,6 +236,7 @@ function ReferencePanel({ boardType }: { boardType: "scrum" | "kanban" }) {
 
 // ── C) Pilares quantitativos (flow / quality) ─────────────────────────
 function PillarSection({ pillar, team, mat, m }: { pillar: Pillar; team: DashboardMaturityData["team"]; mat: MaturityResult; m: any }) {
+  const tx = useText();
   const info = PILLAR_INFO[pillar];
   const rows = mat.metrics.filter((mt) => mt.pillar === pillar);
   const weakest = new Set(mat.weakest);
@@ -243,9 +248,9 @@ function PillarSection({ pillar, team, mat, m }: { pillar: Pillar; team: Dashboa
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">
-          {pillar === "flow" ? "📊" : "🔄"} Pilar {info.n} · {info.title}
+          {pillar === "flow" ? "📊" : "🔄"} {tx("Pilar")}{" "}{info.n} · {tx(info.title)}
         </CardTitle>
-        <p className="text-sm text-muted-foreground">{info.question}</p>
+        <p className="text-sm text-muted-foreground">{tx(info.question)}</p>
       </CardHeader>
       <CardContent>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -259,6 +264,8 @@ function PillarSection({ pillar, team, mat, m }: { pillar: Pillar; team: Dashboa
 }
 
 function PillarMetric({ mt, isWeak }: { mt: MetricEval; isWeak: boolean }) {
+  const tx = useText();
+  const metricDisplay = useMetricDisplay();
   const { lang } = useLang();
   const chip = mt.tier ? TIER_META[mt.tier] : null;
   return (
@@ -266,12 +273,12 @@ function PillarMetric({ mt, isWeak }: { mt: MetricEval; isWeak: boolean }) {
       <div className="min-w-0">
         <p className="text-sm font-medium">{metricLabel(mt.key, lang, mt.label)}</p>
         <p className="text-[11px] text-muted-foreground">
-          {mt.tier == null ? "sem dados suficientes" : mt.nextTarget ? `meta: ${mt.nextTarget}` : "no topo ✓"}
-          {isWeak && <span className="ml-1.5 font-medium text-amber-600">· elo mais fraco</span>}
+          {mt.tier == null ? tx("sem dados suficientes") : mt.nextTarget ? tx(`meta: ${mt.nextTarget}`) : tx("no topo ✓")}
+          {isWeak && <span className="ml-1.5 font-medium text-amber-600">{tx("· elo mais fraco")}</span>}
         </p>
       </div>
       <div className="flex items-center gap-2">
-        <span className={cn("text-xl font-bold tabular-nums", tierTextClass(mt.tier))}>{mt.display}</span>
+        <span className={cn("text-xl font-bold tabular-nums", tierTextClass(mt.tier))}>{metricDisplay(mt.display)}</span>
         {chip ? (
           <Badge variant={chip.token} className="text-[9px]">{chip.name}</Badge>
         ) : (
@@ -284,6 +291,7 @@ function PillarMetric({ mt, isWeak }: { mt: MetricEval; isWeak: boolean }) {
 
 // ── C) Pilar 3 — Ownership (comportamental) ───────────────────────────
 function OwnershipPillar({ team, tier, assessment }: { team: DashboardMaturityData["team"]; tier: Tier | null; assessment: DashboardMaturityData["assessment"] }) {
+  const tx = useText();
   const info = PILLAR_INFO.ownership;
   const signals = assessment?.signals ?? {};
   const readiness = behavioralReadiness(signals);
@@ -295,18 +303,17 @@ function OwnershipPillar({ team, tier, assessment }: { team: DashboardMaturityDa
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="text-lg">👥 Pilar {info.n} · {info.title}</CardTitle>
+          <CardTitle className="text-lg">{tx("👥 Pilar")}{" "}{info.n} · {tx(info.title)}</CardTitle>
           <span className={cn("text-sm font-semibold", meta.tone)}>
-            {meta.label}
+            {tx(meta.label)}
             {readiness.pct != null ? ` · ${readiness.pct}%` : ""}
           </span>
         </div>
-        <p className="text-sm text-muted-foreground">{info.question}</p>
+        <p className="text-sm text-muted-foreground">{tx(info.question)}</p>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Sinais comportamentais avaliados pelo coach — alimentam a prontidão de graduação, não o tier quantitativo.
-        </p>
+          {tx("Sinais comportamentais avaliados pelo coach — alimentam a prontidão de graduação, não o tier quantitativo.")}</p>
         <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
           {defs.map((d) => {
             const v = signals[d.key] as SignalValue | undefined;
@@ -314,25 +321,25 @@ function OwnershipPillar({ team, tier, assessment }: { team: DashboardMaturityDa
             const tone = v === "consistent" ? "text-primary" : v === "emerging" ? "text-amber-600" : v === "not_yet" ? "text-destructive" : "text-muted-foreground/60";
             return (
               <li key={d.key} className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-foreground/80">{d.label}</span>
-                <span className={cn("shrink-0 text-xs font-medium", tone)}>{r?.label ?? "—"}</span>
+                <span className="text-foreground/80">{tx(d.label)}</span>
+                <span className={cn("shrink-0 text-xs font-medium", tone)}>{tx(r?.label ?? "—")}</span>
               </li>
             );
           })}
         </ul>
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
           <div>
-            <p className="text-sm font-medium">Gate de graduação</p>
-            <p className="text-xs text-muted-foreground">métricas em Gold+ e sinais ≥ 75%</p>
+            <p className="text-sm font-medium">{tx("Gate de graduação")}</p>
+            <p className="text-xs text-muted-foreground">{tx("métricas em Gold+ e sinais ≥ 75%")}</p>
           </div>
           <div className="flex items-center gap-3">
             {gradReady ? (
-              <Badge variant="platinum" className="font-semibold">Pronto para revisão</Badge>
+              <Badge variant="platinum" className="font-semibold">{tx("Pronto para revisão")}</Badge>
             ) : (
-              <Badge variant="secondary">Ainda não</Badge>
+              <Badge variant="secondary">{tx("Ainda não")}</Badge>
             )}
             <Link href="/coaching" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-              Avaliar no Coaching Hub <ArrowRight className="h-3 w-3" />
+              {tx("Avaliar no Coaching Hub")}{" "}<ArrowRight className="h-3 w-3" />
             </Link>
           </div>
         </div>

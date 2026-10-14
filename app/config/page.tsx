@@ -1,4 +1,5 @@
 "use client";
+import { useText } from "@/components/lang-context";
 
 /**
  * /config — Configurar Jira + selecionar boards como times.
@@ -99,6 +100,7 @@ function TypeBadge({ type }: { type: "scrum" | "kanban" }) {
 }
 
 export default function ConfigPage() {
+  const tx = useText();
   const demo = useDemo();
   const [status, setStatus] = React.useState<JiraStatus | null>(null);
   const [boards, setBoards] = React.useState<Board[] | null>(null);
@@ -162,7 +164,7 @@ export default function ConfigPage() {
       const r = await fetch(url, { cache: "no-store" });
       const d = await r.json();
       if (!r.ok) {
-        setBoardsErr(d.error ?? "Falha ao buscar boards.");
+        setBoardsErr(d.error ?? tx("Falha ao buscar boards."));
         setBoards([]);
         setTotal(0);
         return;
@@ -215,7 +217,7 @@ export default function ConfigPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setConnectErr(data.error ?? "Falha ao conectar ao Jira.");
+        setConnectErr(data.error ?? tx("Falha ao conectar ao Jira."));
         return;
       }
       // Lembra URL + e-mail p/ próximo prefill (token NÃO vai pro browser).
@@ -303,7 +305,7 @@ export default function ConfigPage() {
       } else {
         res = await fetch(`/api/teams?id=board-${key}`, { method: "DELETE" });
       }
-      if (!res.ok) throw new Error("falha");
+      if (!res.ok) throw new Error(tx("falha"));
       await loadTeams();
       // Ao LIGAR um board, já puxa os dados desse time da API em background.
       if (next) void autoSync(`board-${key}`);
@@ -355,10 +357,9 @@ export default function ConfigPage() {
     <div className="mx-auto max-w-3xl space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Configurar Jira</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{tx("Configurar Jira")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Conecte sua conta do Jira e escolha quais boards viram times monitorados.
-        </p>
+          {tx("Conecte sua conta do Jira e escolha quais boards viram times monitorados.")}</p>
       </div>
 
       <DemoLauncher />
@@ -367,7 +368,7 @@ export default function ConfigPage() {
       {/* Connection card */}
       <Card>
         <CardHeader>
-          <CardTitle>Conexão</CardTitle>
+          <CardTitle>{tx("Conexão")}</CardTitle>
         </CardHeader>
         <CardContent>
           {status == null ? (
@@ -378,12 +379,12 @@ export default function ConfigPage() {
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                 <div className="min-w-0">
                   <p className="text-sm font-medium">
-                    Conectado:{" "}
+                    {tx("Conectado:")}{" "}{" "}
                     <span className="text-primary">{status.site_url}</span>
                   </p>
                   {status.account_name && (
                     <p className="text-xs text-muted-foreground">
-                      Autorizado por {status.account_name}
+                      {tx("Autorizado por")}{" "}{status.account_name}
                     </p>
                   )}
                 </div>
@@ -397,8 +398,7 @@ export default function ConfigPage() {
                 {disconnecting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : null}
-                Desconectar
-              </Button>
+                {tx("Desconectar")}</Button>
             </div>
           ) : (
             <div className="space-y-5">
@@ -408,8 +408,7 @@ export default function ConfigPage() {
                     htmlFor="jira-url"
                     className="text-sm font-medium"
                   >
-                    URL do Jira
-                  </label>
+                    {tx("URL do Jira")}</label>
                   <Input
                     id="jira-url"
                     value={jiraUrl}
@@ -421,8 +420,7 @@ export default function ConfigPage() {
 
                 <div className="space-y-1.5">
                   <label htmlFor="jira-email" className="text-sm font-medium">
-                    E-mail
-                  </label>
+                    {tx("E-mail")}</label>
                   <Input
                     id="jira-email"
                     type="email"
@@ -452,10 +450,8 @@ export default function ConfigPage() {
                       rel="noopener noreferrer"
                       className="text-primary underline underline-offset-2"
                     >
-                      Criar um API token aqui
-                    </a>{" "}
-                    · salvo com segurança no servidor.
-                  </p>
+                      {tx("Criar um API token aqui")}</a>{" "}
+                    {tx("· salvo com segurança no servidor.")}</p>
                 </div>
 
                 {connectErr && (
@@ -465,12 +461,10 @@ export default function ConfigPage() {
                 <Button type="submit" disabled={submitting}>
                   {submitting ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin" /> Conectando…
-                    </>
+                      <Loader2 className="h-4 w-4 animate-spin" /> {tx("Conectando…")}</>
                   ) : (
                     <>
-                      <Plug className="h-4 w-4" /> Conectar ao Jira
-                    </>
+                      <Plug className="h-4 w-4" /> {tx("Conectar ao Jira")}</>
                   )}
                 </Button>
               </form>
@@ -478,21 +472,18 @@ export default function ConfigPage() {
               {/* Como obter o token */}
               <div className="rounded-lg border border-border bg-muted/40 p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Como obter seu API token
-                </p>
+                  {tx("Como obter seu API token")}</p>
                 <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
-                  <li>Acesse id.atlassian.com → Segurança.</li>
-                  <li>Clique em “Create and manage API tokens”.</li>
-                  <li>Clique em “Create API token”.</li>
-                  <li>Copie e cole acima.</li>
+                  <li>{tx("Acesse id.atlassian.com → Segurança.")}</li>
+                  <li>{tx("Clique em “Create and manage API tokens”.")}</li>
+                  <li>{tx("Clique em “Create API token”.")}</li>
+                  <li>{tx("Copie e cole acima.")}</li>
                 </ol>
               </div>
 
               {/* Nota de segurança */}
               <p className="text-xs text-muted-foreground">
-                As credenciais ficam no servidor (Supabase), usadas só para ler o
-                seu Jira. Você pode desconectar quando quiser.
-              </p>
+                {tx("As credenciais ficam no servidor (Supabase), usadas só para ler o seu Jira. Você pode desconectar quando quiser.")}</p>
             </div>
           )}
         </CardContent>
@@ -502,10 +493,10 @@ export default function ConfigPage() {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div className="space-y-1.5">
-            <CardTitle>Boards → times</CardTitle>
+            <CardTitle>{tx("Boards → times")}</CardTitle>
             <p className="text-xs text-muted-foreground">
               {configuredTeams.length}{" "}
-              {configuredTeams.length === 1 ? "time configurado" : "times configurados"}.
+              {configuredTeams.length === 1 ? tx("time configurado") : tx("times configurados")}.
             </p>
           </div>
         </CardHeader>
@@ -516,7 +507,7 @@ export default function ConfigPage() {
                 <AlertCircle className="h-4 w-4" />
                 {boardsBlocked && !notConnected
                   ? boardsErr
-                  : "Conecte o Jira primeiro para buscar boards."}
+                  : tx("Conecte o Jira primeiro para buscar boards.")}
               </div>
             </div>
           ) : (
@@ -524,12 +515,10 @@ export default function ConfigPage() {
               {/* Times configurados */}
               <div className="space-y-2">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Times configurados
-                </p>
+                  {tx("Times configurados")}</p>
                 {configuredTeams.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                    Nenhum time configurado ainda — busque um board abaixo.
-                  </p>
+                    {tx("Nenhum time configurado ainda — busque um board abaixo.")}</p>
                 ) : (
                   <ul className="divide-y divide-border rounded-lg border border-border">
                     {configuredTeams.map((t) => (
@@ -542,13 +531,12 @@ export default function ConfigPage() {
                         </div>
                         {syncingTeams[t.id] && (
                           <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <Loader2 className="h-3 w-3 animate-spin" /> sincronizando…
-                          </span>
+                            <Loader2 className="h-3 w-3 animate-spin" /> {tx("sincronizando…")}</span>
                         )}
                         <TypeBadge type={t.board_type} />
                         <button
                           type="button"
-                          aria-label={`Remover ${t.name}`}
+                          aria-label={tx(`Remover ${t.name}`)}
                           disabled={!!pending[t.jira_board_id ?? ""]}
                           onClick={() =>
                             setTeamActive(
@@ -570,9 +558,7 @@ export default function ConfigPage() {
                 )}
                 {configuredTeams.length > 0 && (
                   <p className="text-[11px] text-muted-foreground">
-                    Os dados sincronizam sozinhos ao selecionar e ficam salvos — na próxima
-                    vez já carregam do banco.
-                  </p>
+                    {tx("Os dados sincronizam sozinhos ao selecionar e ficam salvos — na próxima vez já carregam do banco.")}</p>
                 )}
               </div>
 
@@ -583,28 +569,25 @@ export default function ConfigPage() {
                   className="w-full"
                   onClick={() => setShowPicker(true)}
                 >
-                  <Plus className="h-4 w-4" /> Selecionar mais times
-                </Button>
+                  <Plus className="h-4 w-4" /> {tx("Selecionar mais times")}</Button>
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Selecionar boards
-                    </p>
+                      {tx("Selecionar boards")}</p>
                     <button
                       type="button"
                       onClick={() => setShowPicker(false)}
                       className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
                     >
-                      Fechar
-                    </button>
+                      {tx("Fechar")}</button>
                   </div>
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       value={q}
                       onChange={(e) => setQ(e.target.value)}
-                      placeholder="Buscar board por nome…"
+                      placeholder={tx("Buscar board por nome…")}
                       className="pl-9 pr-9"
                     />
                     {boardsLoading && (
@@ -620,14 +603,13 @@ export default function ConfigPage() {
                   </div>
                 ) : boards.length === 0 ? (
                   <p className="py-6 text-center text-sm text-muted-foreground">
-                    Nenhum board encontrado.
-                  </p>
+                    {tx("Nenhum board encontrado.")}</p>
                 ) : (
                   <>
                     <p className="text-[11px] text-muted-foreground">
                       {q.trim()
-                        ? `${boards.length} de ${total} boards`
-                        : `Digite para buscar entre os ${total} boards`}
+                        ? tx(`${boards.length} de ${total} boards`)
+                        : tx(`Digite para buscar entre os ${total} boards`)}
                     </p>
                     <ul className="divide-y divide-border rounded-lg border border-border">
                       {boards.map((b) => {

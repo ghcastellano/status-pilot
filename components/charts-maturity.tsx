@@ -1,4 +1,5 @@
 "use client";
+import { useMetricDisplay, useText, useLocale } from "@/components/lang-context";
 
 import {
   BarChart, Bar, Cell, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
@@ -19,27 +20,24 @@ export interface MaturityWeek {
   metrics?: { metrics?: { label: string; display: string }[] } | null;
 }
 
-const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-const wk = (iso: string) => {
-  const d = new Date(iso + "T00:00:00Z");
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
-};
 
 function TierTooltip({ active, payload }: any) {
+  const tx = useText();
+  const metricDisplay = useMetricDisplay();
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
   const tier = p.tier as Tier | null;
   return (
     <div className="max-w-[220px] rounded-md border border-border bg-card px-2.5 py-1.5 text-xs shadow-md">
       <div className="font-medium text-foreground">
-        Semana de {p.label} ·{" "}
+        {tx("Semana de")}{" "}{tx(p.label)} ·{" "}
         <span style={{ color: tier ? TIER_HEX[tier] : undefined }}>
-          {tier ? TIER_NAME[tier] : "sem dados"}
+          {tier ? TIER_NAME[tier] : tx("sem dados")}
         </span>
       </div>
       {(p.rows ?? []).map((r: { label: string; display: string }) => (
-        <div key={r.label} className="mt-0.5 text-muted-foreground">
-          {r.label}: <span className="text-foreground">{r.display}</span>
+        <div key={tx(r.label)} className="mt-0.5 text-muted-foreground">
+          {tx(r.label)}: <span className="text-foreground">{metricDisplay(r.display)}</span>
         </div>
       ))}
     </div>
@@ -48,8 +46,9 @@ function TierTooltip({ active, payload }: any) {
 
 /** Maturidade semana a semana — barra colorida pelo tier (Silver/Gold/Platinum). */
 export function MaturityHistoryChart({ data }: { data: MaturityWeek[] }) {
+  const locale = useLocale();
   const rows = data.map((d) => ({
-    label: wk(d.as_of),
+    label: new Date(d.as_of + "T00:00:00Z").toLocaleDateString(locale, {day: "numeric", month: "short", timeZone: "UTC"}),
     tier: d.tier,
     value: d.tier ?? 0,
     rows: d.metrics?.metrics?.map((m) => ({ label: m.label, display: m.display })) ?? [],

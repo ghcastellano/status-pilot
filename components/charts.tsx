@@ -1,4 +1,5 @@
 "use client";
+import { useWeekLabel, useText, useLocale } from "@/components/lang-context";
 
 import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, ReferenceLine, ResponsiveContainer,
@@ -44,9 +45,11 @@ export function CycleScatter({
   data: { doneDate: string; cycleDays: number; key: string; title: string }[];
   p50: number; p85: number;
 }) {
+  const tx = useText();
+  const locale = useLocale();
   const points = data.map((d) => ({
     x: new Date(d.doneDate).getTime(), y: d.cycleDays, key: d.key, title: d.title,
-    dateLabel: new Date(d.doneDate).toLocaleDateString("pt-BR"),
+    dateLabel: new Date(d.doneDate).toLocaleDateString(locale),
   }));
   return (
     <Box>
@@ -55,14 +58,14 @@ export function CycleScatter({
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis
             type="number" dataKey="x" domain={["dataMin", "dataMax"]} {...axis}
-            tickFormatter={(v) => new Date(v).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
-            label={xLabel("Data de conclusão")}
+            tickFormatter={(v) => new Date(v).toLocaleDateString(locale, { day: "2-digit", month: "short" })}
+            label={xLabel(tx("Data de conclusão"))}
           />
-          <YAxis type="number" dataKey="y" {...axis} unit="d" width={48} label={yLabel("Cycle time (dias)")} />
+          <YAxis type="number" dataKey="y" {...axis} unit="d" width={48} label={yLabel(tx("Cycle time (dias)"))} />
           <ZAxis range={[55, 55]} />
           <ReferenceLine y={p50} stroke={ACCENT} strokeDasharray="4 4" label={{ value: `p50 ${p50}d`, fontSize: 10, fill: ACCENT, position: "insideTopLeft" }} />
           <ReferenceLine y={p85} stroke="#c2701c" strokeDasharray="4 4" label={{ value: `p85 ${p85}d`, fontSize: 10, fill: "#c2701c", position: "insideTopLeft" }} />
-          <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<IssueTooltip valueLabel="dias" />} />
+          <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<IssueTooltip valueLabel={tx("dias")} />} />
           <Scatter data={points} fill={ACCENT} fillOpacity={0.75} />
         </ScatterChart>
       </ResponsiveContainer>
@@ -72,14 +75,16 @@ export function CycleScatter({
 
 // ── Throughput por semana ──
 export function ThroughputBar({ series }: { series: { weekLabel: string; count: number }[] }) {
+  const tx = useText();
+  const weekLabel = useWeekLabel();
   return (
     <Box>
       <ResponsiveContainer>
         <BarChart data={series} margin={{ top: 8, right: 8, bottom: 24, left: 8 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
-          <XAxis dataKey="weekLabel" {...axis} label={xLabel("Semana (início)")} />
-          <YAxis {...axis} allowDecimals={false} width={44} label={yLabel("Itens concluídos")} />
-          <Tooltip {...tip} cursor={{ fill: "rgba(47,143,122,0.08)" }} formatter={(v: any) => [`${v} itens`, "concluídos"]} labelFormatter={(l) => `Semana de ${l}`} />
+          <XAxis dataKey="weekLabel" {...axis} tickFormatter={weekLabel} label={xLabel(tx("Semana (início)"))} />
+          <YAxis {...axis} allowDecimals={false} width={44} label={yLabel(tx("Itens concluídos"))} />
+          <Tooltip {...tip} cursor={{ fill: "rgba(47,143,122,0.08)" }} formatter={(v: any) => [tx(`${v} itens`), tx("concluídos")]} labelFormatter={(l) => tx(`Semana de ${weekLabel(String(l))}`)} />
           <Bar dataKey="count" fill={ACCENT} radius={[4, 4, 0, 0]} maxBarSize={36} />
         </BarChart>
       </ResponsiveContainer>
@@ -108,14 +113,16 @@ export function VelocityBar({ data }: { data: { sprint: string; committed: numbe
 
 // ── Sprint Burndown: ideal vs real ──
 export function BurndownLine({ data }: { data: { date: string; ideal: number; actual: number | null }[] }) {
+  const tx = useText();
+  const locale = useLocale();
   return (
     <Box>
       <ResponsiveContainer>
         <LineChart data={data} margin={{ top: 32, right: 12, bottom: 24, left: 8 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
-          <XAxis dataKey="date" {...axis} tickFormatter={(v) => new Date(v).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} minTickGap={24} label={xLabel("Dia da sprint")} />
-          <YAxis {...axis} width={44} label={yLabel("Pontos restantes")} />
-          <Tooltip {...tip} labelFormatter={(v) => new Date(v).toLocaleDateString("pt-BR")} formatter={(v: any, n: any) => [`${v} pts`, n]} />
+          <XAxis dataKey="date" {...axis} tickFormatter={(v) => new Date(v).toLocaleDateString(locale, { day: "2-digit", month: "short" })} minTickGap={24} label={xLabel(tx("Dia da sprint"))} />
+          <YAxis {...axis} width={44} label={yLabel(tx("Pontos restantes"))} />
+          <Tooltip {...tip} labelFormatter={(v) => new Date(v).toLocaleDateString(locale)} formatter={(v: any, n: any) => [`${v} pts`, n]} />
           <Legend wrapperStyle={{ fontSize: 11 }} iconType="plainline" verticalAlign="top" />
           <Line type="monotone" dataKey="ideal" name="Ideal" stroke={MUTED} strokeDasharray="5 5" dot={false} strokeWidth={1.5} />
           <Line type="monotone" dataKey="actual" name="Real" stroke={ACCENT} dot={false} strokeWidth={2.5} connectNulls />

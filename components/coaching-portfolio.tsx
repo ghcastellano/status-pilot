@@ -1,4 +1,5 @@
 "use client";
+import { useMetricDisplay, useText } from "@/components/lang-context";
 
 /**
  * Camada de portfolio do Coaching Hub: ProgramHeader (distribuição + movimento),
@@ -57,6 +58,7 @@ const needsAttention = (b: PortfolioBoard) => b.status === "at_risk" || b.maturi
 
 // ── Program header ────────────────────────────────────────────────────
 export function ProgramHeader({ boards }: { boards: PortfolioBoard[] }) {
+  const tx = useText();
   const bands: Record<Tier, number> = { 1: 0, 2: 0, 3: 0 };
   for (const b of boards) if (b.maturity.tier) bands[b.maturity.tier] += 1;
   const total = boards.length;
@@ -66,9 +68,9 @@ export function ProgramHeader({ boards }: { boards: PortfolioBoard[] }) {
   const atPlatinum = boards.filter((b) => b.maturity.tier === 3).length;
 
   const movement = [
-    { icon: "↑", n: leveledUp, label: "subiram de nível", tone: "text-primary" },
-    { icon: "⚠", n: attention, label: "precisam de atenção", tone: "text-destructive" },
-    { icon: "🎓", n: atPlatinum, label: "em Platinum", tone: "text-primary" },
+    { icon: "↑", n: leveledUp, label: tx("subiram de nível"), tone: "text-primary" },
+    { icon: "⚠", n: attention, label: tx("precisam de atenção"), tone: "text-destructive" },
+    { icon: "🎓", n: atPlatinum, label: tx("em Platinum"), tone: "text-primary" },
   ];
 
   return (
@@ -76,16 +78,15 @@ export function ProgramHeader({ boards }: { boards: PortfolioBoard[] }) {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Target className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Programa de Coaching</h2>
+          <h2 className="text-lg font-semibold">{tx("Programa de Coaching")}</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          <span className="font-semibold text-primary">{total}</span> {total === 1 ? "time" : "times"}
+          <span className="font-semibold text-primary">{total}</span> {total === 1 ? tx("time") : tx("times")}
         </p>
       </div>
 
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Distribuição de maturidade
-      </p>
+        {tx("Distribuição de maturidade")}</p>
       <div className="mt-2 flex h-3 w-full overflow-hidden rounded-full bg-muted">
         {TIER_ORDER.map((t) =>
           bands[t] > 0 ? (
@@ -157,21 +158,23 @@ export function Section({
 
 // ── TeamCard (rico) ───────────────────────────────────────────────────
 export function TeamCard({ b, onOpen }: { b: PortfolioBoard; onOpen: (id: string) => void }) {
+  const tx = useText();
+  const metricDisplay = useMetricDisplay();
   const tier = b.maturity.tier;
   const token = b.maturity.tierToken;
   const weakest = new Set(b.maturity.weakest);
   const readiness = READINESS_META[b.behavioral.label];
   const MOVE = {
-    up: { arrow: "↑", label: "subiu de nível", tone: "text-primary" },
-    down: { arrow: "↓", label: "regrediu", tone: "text-destructive" },
-    recovered: { arrow: "↻", label: "recuperou", tone: "text-primary" },
-    flat: { arrow: "→", label: "estável", tone: "text-muted-foreground" },
+    up: { arrow: "↑", label: tx("subiu de nível"), tone: "text-primary" },
+    down: { arrow: "↓", label: tx("regrediu"), tone: "text-destructive" },
+    recovered: { arrow: "↻", label: tx("recuperou"), tone: "text-primary" },
+    flat: { arrow: "→", label: tx("estável"), tone: "text-muted-foreground" },
   } as const;
   const move = MOVE[b.movement];
 
   const focusLabel = b.workingOn.length ? "Working on" : b.mainGap ? "Gap" : null;
   const focusText = b.workingOn.length
-    ? b.workingOn.map((p) => PILLAR_SHORT[p]).join(", ")
+    ? b.workingOn.map((p) => tx(PILLAR_SHORT[p])).join(", ")
     : b.mainGap ?? null;
 
   return (
@@ -191,8 +194,7 @@ export function TeamCard({ b, onOpen }: { b: PortfolioBoard; onOpen: (id: string
           </Badge>
         ) : (
           <Badge variant="secondary" className="shrink-0">
-            Sem dados
-          </Badge>
+            {tx("Sem dados")}</Badge>
         )}
       </div>
 
@@ -202,13 +204,12 @@ export function TeamCard({ b, onOpen }: { b: PortfolioBoard; onOpen: (id: string
         {b.coach && <span>· {b.coach}</span>}
         {b.status && (
           <span className={cn("rounded px-1.5 py-0.5 font-medium", STATUS_META[b.status].cls)}>
-            {STATUS_META[b.status].label}
+            {tx(STATUS_META[b.status].label)}
           </span>
         )}
         {b.maturity.lowConfidence && (
-          <span className="rounded border border-border bg-muted/50 px-1.5 py-0.5 font-medium" title={b.maturity.note ?? ""}>
-            Baixa confiança
-          </span>
+          <span className="rounded border border-border bg-muted/50 px-1.5 py-0.5 font-medium" title={tx(b.maturity.note ?? "")}>
+            {tx("Baixa confiança")}</span>
         )}
       </div>
 
@@ -221,8 +222,8 @@ export function TeamCard({ b, onOpen }: { b: PortfolioBoard; onOpen: (id: string
 
       {/* Caption + movimento */}
       <div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-        <span className="truncate">{b.caption}</span>
-        <span className={cn("shrink-0 font-semibold", move.tone)} title="Movimento no período">
+        <span className="truncate">{tx(b.caption)}</span>
+        <span className={cn("shrink-0 font-semibold", move.tone)} title={tx("Movimento no período")}>
           {move.arrow} {move.label}
         </span>
       </div>
@@ -235,10 +236,10 @@ export function TeamCard({ b, onOpen }: { b: PortfolioBoard; onOpen: (id: string
             <div
               key={mt.key}
               className={cn("rounded-md bg-muted/50 p-2", isWeak && token && RING_CLASS[token])}
-              title={isWeak ? "Elo mais fraco — trava o tier" : undefined}
+              title={isWeak ? tx("Elo mais fraco — trava o tier") : undefined}
             >
-              <span className="block truncate text-[10px] text-muted-foreground">{mt.label}</span>
-              <span className={cn("text-sm font-bold tabular-nums", tierTextClass(mt.tier))}>{mt.display}</span>
+              <span className="block truncate text-[10px] text-muted-foreground">{tx(mt.label)}</span>
+              <span className={cn("text-sm font-bold tabular-nums", tierTextClass(mt.tier))}>{metricDisplay(mt.display)}</span>
             </div>
           );
         })}
@@ -248,7 +249,7 @@ export function TeamCard({ b, onOpen }: { b: PortfolioBoard; onOpen: (id: string
       <div className="mt-auto pt-3 text-xs">
         <span className="text-muted-foreground">Behavioral:</span>{" "}
         <span className={cn("font-medium", readiness.tone)}>
-          {readiness.label}
+          {tx(readiness.label)}
           {b.behavioral.pct != null ? ` · ${b.behavioral.pct}%` : ""}
         </span>
       </div>
@@ -286,6 +287,7 @@ export function RosterModal({
   onOpen: (id: string) => void;
   onClose: () => void;
 }) {
+  const tx = useText();
   const [q, setQ] = React.useState("");
   const [pending, setPending] = React.useState<string | null>(null);
   const query = q.trim().toLowerCase();
@@ -303,19 +305,18 @@ export function RosterModal({
       <div className="w-full max-w-2xl rounded-xl border border-border bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
           <div>
-            <h2 className="text-lg font-semibold">Times no programa de coaching</h2>
+            <h2 className="text-lg font-semibold">{tx("Times no programa de coaching")}</h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {inCount} em coaching · ligar um time o inclui no programa e no resumo da liderança.
-            </p>
+              {inCount} {tx("em coaching · ligar um time o inclui no programa e no resumo da liderança.")}</p>
           </div>
-          <button onClick={onClose} aria-label="Fechar" className="rounded p-1 text-muted-foreground hover:bg-muted">
+          <button onClick={onClose} aria-label={tx("Fechar")} className="rounded p-1 text-muted-foreground hover:bg-muted">
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="p-5">
           <div className="relative mb-3">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar time ou coach…" className="pl-9" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tx("Buscar time ou coach…")} className="pl-9" />
           </div>
           <ul className="max-h-[55vh] divide-y divide-border overflow-y-auto">
             {list.map((b) => (
@@ -338,11 +339,10 @@ export function RosterModal({
                   </Badge>
                 )}
                 <button onClick={() => onOpen(b.team.id)} className="shrink-0 text-xs font-medium text-primary hover:underline">
-                  Abrir
-                </button>
+                  {tx("Abrir")}</button>
               </li>
             ))}
-            {list.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">Nenhum time encontrado.</li>}
+            {list.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">{tx("Nenhum time encontrado.")}</li>}
           </ul>
         </div>
       </div>
@@ -352,15 +352,16 @@ export function RosterModal({
 
 // ── Botão que abre o roster (usado no header do Portfolio) ────────────
 export function ManageTeamsButton({ onClick }: { onClick: () => void }) {
+  const tx = useText();
   return (
     <Button variant="outline" size="sm" onClick={onClick}>
-      <Users className="h-4 w-4" /> Gerenciar times
-    </Button>
+      <Users className="h-4 w-4" /> {tx("Gerenciar times")}</Button>
   );
 }
 
 // ── Leadership summary ────────────────────────────────────────────────
 export function LeadershipSummary({ boards }: { boards: PortfolioBoard[] }) {
+  const tx = useText();
   const [copied, setCopied] = React.useState(false);
   const inProgram = boards.filter((b) => b.status);
   const lvl = (t: Tier | null) => (t ? TIER_META[t].name : "—");
@@ -369,22 +370,22 @@ export function LeadershipSummary({ boards }: { boards: PortfolioBoard[] }) {
     .filter((b) => b.status === "graduated" || b.leveledUp || b.movement === "recovered")
     .map((b) =>
       b.status === "graduated"
-        ? `${b.team.name} graduou para Platinum`
+        ? tx(`${b.team.name} graduou para Platinum`)
         : b.leveledUp
-          ? `${b.team.name} subiu para ${lvl(b.maturity.tier)}`
-          : `${b.team.name} recuperou para ${lvl(b.maturity.tier)}`
+          ? tx(`${b.team.name} subiu para ${lvl(b.maturity.tier)}`)
+          : tx(`${b.team.name} recuperou para ${lvl(b.maturity.tier)}`)
     );
 
-  const regressing = inProgram.filter((b) => b.status === "at_risk").map((b) => `${b.team.name} regredindo (agora ${lvl(b.maturity.tier)})`);
+  const regressing = inProgram.filter((b) => b.status === "at_risk").map((b) => tx(`${b.team.name} regredindo (agora ${lvl(b.maturity.tier)})`));
   const stillSilver = inProgram.filter((b) => b.status !== "at_risk" && b.maturity.tier === 1).map((b) => b.team.name);
   const needsAttentionList = [
     ...regressing,
-    ...(stillSilver.length ? [`${stillSilver.length} time${stillSilver.length > 1 ? "s" : ""} ainda Silver — trabalho de base: ${stillSilver.join(", ")}`] : []),
+    ...(stillSilver.length ? [tx(`${stillSilver.length} time${stillSilver.length > 1 ? "s" : ""} ainda Silver — trabalho de base: ${stillSilver.join(", ")}`)] : []),
   ];
 
   const focusTally: Record<string, number> = {};
   for (const b of inProgram) for (const p of b.workingOn) focusTally[p] = (focusTally[p] ?? 0) + 1;
-  const focusLine = Object.keys(focusTally).map((p) => `${PILLAR_SHORT[p as Pillar]} (${focusTally[p]})`).join(" · ");
+  const focusLine = Object.keys(focusTally).map((p) => `${tx(PILLAR_SHORT[p as Pillar])} (${focusTally[p]})`).join(" · ");
 
   const asks = inProgram.filter((b) => b.ask).map((b) => `${b.team.name}: ${b.ask}`);
 
@@ -392,13 +393,13 @@ export function LeadershipSummary({ boards }: { boards: PortfolioBoard[] }) {
   for (const b of inProgram) if (b.maturity.tier) bands[b.maturity.tier] += 1;
 
   const asText = () => {
-    const L: string[] = ["Programa de coaching — resumo para liderança", ""];
-    L.push(`Programa: ${inProgram.length} times — ${bands[1]} Silver · ${bands[2]} Gold · ${bands[3]} Platinum`, "");
-    L.push("Ganhos / melhorando:");
+    const L: string[] = [tx("Programa de coaching — resumo para liderança"), ""];
+    L.push(tx(`Programa: ${inProgram.length} times — ${bands[1]} Silver · ${bands[2]} Gold · ${bands[3]} Platinum`), "");
+    L.push(tx("Ganhos / melhorando:"));
     (improving.length ? improving : ["—"]).forEach((s) => L.push(`  • ${s}`));
-    L.push("", "Precisa de atenção:");
+    L.push("", tx("Precisa de atenção:"));
     (needsAttentionList.length ? needsAttentionList : ["—"]).forEach((s) => L.push(`  • ${s}`));
-    L.push("", `Foco ativo: ${focusLine || "—"}`, "", "Onde a liderança pode ajudar:");
+    L.push("", tx(`Foco ativo: ${focusLine || "—"}`), "", tx("Onde a liderança pode ajudar:"));
     (asks.length ? asks : ["—"]).forEach((s) => L.push(`  • ${s}`));
     return L.join("\n");
   };
@@ -431,10 +432,10 @@ export function LeadershipSummary({ boards }: { boards: PortfolioBoard[] }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Resumo para liderança · este trimestre</h2>
+        <h2 className="text-lg font-semibold">{tx("Resumo para liderança · este trimestre")}</h2>
         <Button variant="outline" size="sm" onClick={copy}>
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-          {copied ? "Copiado" : "Copiar como texto"}
+          {copied ? tx("Copiado") : tx("Copiar como texto")}
         </Button>
       </div>
 
@@ -442,7 +443,7 @@ export function LeadershipSummary({ boards }: { boards: PortfolioBoard[] }) {
       <div className="grid gap-4 md:grid-cols-3">
         {TIER_ORDER.map((t) => {
           const meta = TIER_META[t];
-          const desc = t === 1 ? "Suporte necessário" : t === 2 ? "Suporte condicional" : "Candidatos a graduação";
+          const desc = t === 1 ? tx("Suporte necessário") : t === 2 ? tx("Suporte condicional") : tx("Candidatos a graduação");
           return (
             <Card key={t} className="flex items-center gap-3 p-4">
               <span className={cn("h-8 w-1.5 rounded-full", BAR_CLASS[meta.token])} />
@@ -457,13 +458,13 @@ export function LeadershipSummary({ boards }: { boards: PortfolioBoard[] }) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <SummaryCard title="Ganhos / melhorando" tone="text-primary" items={improving} empty="Sem movimento de nível ainda." />
-        <SummaryCard title="Precisa de atenção" tone="text-destructive" items={needsAttentionList} empty="Nada sinalizado." />
+        <SummaryCard title={tx("Ganhos / melhorando")} tone="text-primary" items={improving} empty={tx("Sem movimento de nível ainda.")} />
+        <SummaryCard title={tx("Precisa de atenção")} tone="text-destructive" items={needsAttentionList} empty={tx("Nada sinalizado.")} />
         <Card className="p-5">
-          <p className="mb-1.5 text-base font-semibold">Foco ativo</p>
+          <p className="mb-1.5 text-base font-semibold">{tx("Foco ativo")}</p>
           <p className="text-sm text-foreground/80">{focusLine || "—"}</p>
         </Card>
-        <SummaryCard title="Onde a liderança pode ajudar" tone="text-amber-600" items={asks} empty="Nenhum pedido aberto." />
+        <SummaryCard title={tx("Onde a liderança pode ajudar")} tone="text-amber-600" items={asks} empty={tx("Nenhum pedido aberto.")} />
       </div>
     </div>
   );

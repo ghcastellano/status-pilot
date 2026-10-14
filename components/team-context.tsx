@@ -1,4 +1,5 @@
 "use client";
+import { useText } from "@/components/lang-context";
 
 import * as React from "react";
 
@@ -24,6 +25,7 @@ const TeamContext = React.createContext<TeamContextValue | undefined>(undefined)
 const STORAGE_KEY = "status-pilot:selected-team";
 
 export function TeamProvider({ children }: { children: React.ReactNode }) {
+  const tx = useText();
   const [teams, setTeams] = React.useState<Team[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -32,7 +34,7 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     let active = true;
     fetch("/api/teams")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Falha ao carregar times"))))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(tx("Falha ao carregar times")))))
       .then((data: { teams: Team[] }) => {
         if (!active) return;
         setTeams(data.teams);

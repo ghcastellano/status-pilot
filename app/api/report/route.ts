@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
+  const lang = body?.lang === "en" ? "en" : "pt";
   const { teamId, sessionId, force } = body ?? {};
   if (!isValidTeamId(teamId)) {
     return NextResponse.json({ error: "Time inválido." }, { status: 400 });
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   try {
     if (!force) {
-      const cached = await getCachedAnswer(teamId, REPORT_KEY);
+      const cached = await getCachedAnswer(teamId, `${REPORT_KEY}_${lang}`);
       if (cached) return NextResponse.json({ report: cached, cached: true });
     }
 
@@ -43,9 +44,9 @@ export async function POST(req: NextRequest) {
     const epicNames = Object.fromEntries(epics.map((e) => [e.epic_key, e.name]));
     const metrics = computeTeamMetrics(team, sprints, issues, { epicNames });
     const bundle = computeAnalysisBundle(metrics, issues, epicNames);
-    const report = await generateReport(bundle, metrics.scrum);
+    const report = await generateReport(bundle, metrics.scrum, lang);
 
-    await setCachedAnswer(teamId, REPORT_KEY, report);
+    await setCachedAnswer(teamId, `${REPORT_KEY}_${lang}`, report);
     return NextResponse.json({ report, cached: false, remaining: rl.remaining });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

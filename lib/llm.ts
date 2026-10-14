@@ -1,3 +1,4 @@
+import type { Language } from "./locales/translate";
 /**
  * lib/llm.ts — integração com OpenAI GPT-4o (SOMENTE backend).
  * Constrói um snapshot compacto das métricas e responde/gera report a partir
@@ -107,7 +108,7 @@ function parseInsights(raw: string): MetricInsights {
 }
 
 /** Insight POR MÉTRICA, INVESTIGATIVO (a IA cruza épico × estágio × outliers). */
-export async function generateMetricInsights(bundle: AnalysisBundle): Promise<MetricInsights> {
+export async function generateMetricInsights(bundle: AnalysisBundle, lang: Language = "pt"): Promise<MetricInsights> {
   const secondary = bundle.method === "scrum" ? "velocity" : "throughput";
   try {
     const res = await getClient().chat.completions.create({
@@ -116,7 +117,7 @@ export async function generateMetricInsights(bundle: AnalysisBundle): Promise<Me
       max_tokens: 500,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: investigativePrompt(secondary) },
+        { role: "system", content: investigativePrompt(secondary).replace("Português do Brasil;", lang === "en" ? "Write all values in English;" : "Português do Brasil;") },
         { role: "user", content: JSON.stringify(bundle) },
       ],
     });
@@ -159,7 +160,8 @@ function buildTeamContext(m: TeamMetrics, bundle: AnalysisBundle): object {
 /** Responde considerando TODOS os times com os dados completos do dashboard. */
 export async function answerAcrossTeams(
   list: { metrics: TeamMetrics; bundle: AnalysisBundle }[],
-  question: string
+  question: string,
+  lang: Language = "pt"
 ): Promise<string> {
   const context = list
     .map(({ metrics, bundle }) =>
@@ -176,7 +178,7 @@ export async function answerAcrossTeams(
       {
         role: "system",
         content:
-          GROUNDING +
+          (lang === "en" ? GROUNDING.replace("Escreva em português do Brasil", "Write in English") : GROUNDING) +
           " Você recebe os dados completos de TODOS os times (mesmos dados exibidos no dashboard: " +
           "cycle time, throughput, flow efficiency, WIP, análise por épico, por estágio, outliers, aging). " +
           "Compare entre eles quando fizer sentido. Se a pergunta for sobre um time específico, foque nele. " +
@@ -192,6 +194,7 @@ export async function answerAcrossTeams(
 export async function generateReport(
   bundle: AnalysisBundle,
   scrum: ScrumMetrics | null,
+  lang: Language = "pt",
 ): Promise<string> {
   const isScrumMethod = bundle.method === "scrum";
   const sprintSection = isScrumMethod ? "'## Sprint atual'" : "'## Trabalho em andamento'";
@@ -218,7 +221,7 @@ export async function generateReport(
     temperature: 0.3,
     max_tokens: 1400,
     messages: [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: lang === "en" ? systemPrompt.replace("em português do Brasil", "in English").replace("## Sprint atual", "## Current sprint").replace("## Trabalho em andamento", "## Work in progress").replace("## Saúde do fluxo", "## Flow health").replace("## Análise por épico", "## Epic analysis").replace("## Itens em risco", "## At-risk items").replace("## Pontos de atenção", "## Watch points").replace("## Próximos passos", "## Next steps") : systemPrompt },
       {
         role: "user",
         content:
