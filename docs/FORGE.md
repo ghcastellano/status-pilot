@@ -58,7 +58,9 @@ insights. O `ForgeProvider` só troca **como** `getBase()` resolve base+auth.
 
 | Var | Uso |
 |---|---|
-| `FORGE_REMOTE_AUDIENCE` | baseUrl do backend registrado como remote (ex.: `https://status-pilot.vercel.app`). O `aud` do FIT precisa casar — **defina em produção** p/ impedir replay. |
+| `FORGE_ALLOWED_CLOUD_ID` | Trusted Jira cloud UUID; requests from other tenants are rejected. |
+| `FORGE_ALLOWED_INSTALLATION_ID` | Trusted Forge installation ARI. |
+| `FORGE_REMOTE_AUDIENCE` | Forge app ARI (`ari:cloud:ecosystem::app/...`). The verified FIT audience must match; this is not the backend URL. |
 | `FORGE_JWKS_URL` | (opcional) sobrescreve o JWKS do Forge se a Atlassian rotacionar a URL. |
 
 ## Rodando o spike (na sua máquina + seu próprio site Atlassian)

@@ -1,3 +1,4 @@
+import { replaceTeamSnapshot } from "./snapshot";
 /**
  * lib/jira-ingest.ts — ingestão de um BOARD REAL do Jira (SOMENTE backend).
  *
@@ -11,7 +12,7 @@
 import type { JiraProvider, JiraIssue } from "./jira";
 import { getSupabaseAdmin } from "./supabase";
 import type { IssueRow, SprintRow, StageStamp, IssueType, IssueStatus, TeamRow } from "./metrics";
-import { storeMaturityHistory } from "./maturity-history";
+import { buildMaturityHistoryRows } from "./maturity-history";
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -315,7 +316,7 @@ async function boardJql(jira: JiraProvider, boardId: string): Promise<string | n
  * sprints do campo Sprint. board_type DETECTADO (scrum se há sprints) e corrigido.
  * Retorna nº de issues.
  */
-export async function ingestBoard(jira: JiraProvider, team: TeamRow): Promise<number> {
+export async function ingestBoard(jira: JiraProvider, team: TeamRow, source = "basic"): Promise<number> {
   const projectKey = team.jira_project_key;
   const sb = getSupabaseAdmin();
 
@@ -370,32 +371,8 @@ export async function ingestBoard(jira: JiraProvider, team: TeamRow): Promise<nu
   const sprintIds = new Set(sprintRows.map((s) => s.id));
   for (const r of issueRows) if (r.sprint_id && !sprintIds.has(r.sprint_id)) r.sprint_id = null;
 
-  // Escrita: sprints antes das issues (FK). delete-then-insert por time.
-  await sb.from("issues").delete().eq("team_id", team.id);
-  await sb.from("sprints").delete().eq("team_id", team.id);
-  if (sprintRows.length) {
-    const { error } = await sb.from("sprints").upsert(sprintRows);
-    if (error) throw new Error(`sprints ${team.id}: ${error.message}`);
-  }
-  for (let k = 0; k < issueRows.length; k += 200) {
-    const { error } = await sb.from("issues").upsert(issueRows.slice(k, k + 200), { onConflict: "id" });
-    if (error) throw new Error(`issues ${team.id}: ${error.message}`);
-  }
-  // Board da Agile (id numérico) tem tipo REAL — respeita. Projeto v3 (id = key) → detecta.
-  const fromAgileBoard = /^\d+$/.test(team.jira_board_id ?? "");
-  const effectiveType = fromAgileBoard ? team.board_type : detectedType;
-  if (!fromAgileBoard && detectedType !== team.board_type) {
-    await sb.from("teams").update({ board_type: detectedType }).eq("id", team.id);
-  }
-  await sb.from("qa_cache").delete().eq("team_id", team.id);
-
-  // Análise RETROATIVA da maturidade → metrics_history (dashboard lê do banco,
-  // sem consultar a API toda hora). Por sprint fechado (scrum) / semana (kanban).
-  try {
-    await storeMaturityHistory(sb, { ...team, board_type: effectiveType }, sprintRows, issueRows);
-  } catch (e) {
-    // não falha a ingestão por causa do histórico
-    console.error(`metrics_history ${team.id}:`, (e as Error).message);
-  }
+  const effectiveType = numericBoard ? team.board_type : detectedType;
+  const history = buildMaturityHistoryRows({ ...team, board_type: effectiveType }, sprintRows, issueRows);
+  await replaceTeamSnapshot(team.id, issueRows, sprintRows, effectiveType, source, history);
   return issueRows.length;
 }

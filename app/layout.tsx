@@ -1,3 +1,4 @@
+import { WorkspaceAccess } from "@/components/workspace-access";
 import { cookies } from "next/headers";
 import { DemoProvider, DemoBanner } from "@/components/demo-workspace";
 import { DEMO_COOKIE, DEMO_VERSION, isDemoOnly } from "@/lib/demo/session";
@@ -24,7 +25,7 @@ export const metadata: Metadata = {
     "Leia dados de Jira, acompanhe métricas de fluxo e gere status reports com IA.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -38,11 +39,11 @@ export default function RootLayout({
           enableSystem={false}
         >
           <LangProvider>
-            <DemoProvider active={isDemoOnly() || cookies().get(DEMO_COOKIE)?.value === DEMO_VERSION} locked={isDemoOnly()}>
+            <DemoProvider active={isDemoOnly() || (await cookies()).get(DEMO_COOKIE)?.value === DEMO_VERSION} locked={isDemoOnly()}>
             <TeamProvider>
               <div className="flex min-h-screen">
                 <Sidebar />
-                <div className="flex flex-1 flex-col">
+                <div className="flex min-w-0 flex-1 flex-col">
                   <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b border-border bg-background/80 px-4 backdrop-blur md:px-8">
                     <TeamSelector />
                     <div className="flex items-center gap-2">
@@ -51,7 +52,7 @@ export default function RootLayout({
                     </div>
                   </header>
                   <DemoBanner />
-                  <main className="flex-1 p-4 pb-20 md:p-8">{children}</main>
+                  <main className="flex-1 p-4 pb-20 md:p-8"><WorkspaceAccess>{children}</WorkspaceAccess></main>
                 </div>
                 <MobileNav />
               </div>

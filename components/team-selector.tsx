@@ -17,7 +17,7 @@ export function TeamSelector() {
 
   if (loading) {
     return (
-      <div className="h-10 w-56 animate-pulse rounded-md bg-muted" aria-hidden />
+      <div className="h-10 w-40 animate-pulse rounded-md bg-muted sm:w-56" aria-hidden />
     );
   }
 
@@ -27,7 +27,7 @@ export function TeamSelector() {
         value={selectedTeam?.id}
         onValueChange={(v) => setSelectedTeamId(v)}
       >
-        <SelectTrigger className="w-56">
+        <SelectTrigger className="w-40 sm:w-56">
           <SelectValue placeholder={tx("Selecione um time")} />
         </SelectTrigger>
         <SelectContent>
@@ -39,7 +39,7 @@ export function TeamSelector() {
         </SelectContent>
       </Select>
       {selectedTeam && (
-        <Badge variant={selectedTeam.board_type === "scrum" ? "default" : "secondary"}>
+        <Badge className="hidden sm:inline-flex" variant={selectedTeam.board_type === "scrum" ? "default" : "secondary"}>
           {selectedTeam.board_type === "scrum" ? "Scrum" : "Kanban"}
         </Badge>
       )}

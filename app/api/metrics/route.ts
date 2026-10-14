@@ -1,3 +1,4 @@
+import { withWorkspaceAuth } from "@/lib/auth/route";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTeamData } from "@/lib/data";
 import { computeTeamMetrics } from "@/lib/metrics";
@@ -6,7 +7,7 @@ import { resolveWindow } from "@/lib/window";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+export const GET = withWorkspaceAuth(async (req: NextRequest, user) => {
   const p = req.nextUrl.searchParams;
   const teamId = p.get("teamId");
   if (!teamId) {
@@ -43,4 +44,4 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});

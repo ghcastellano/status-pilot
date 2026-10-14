@@ -1,18 +1,19 @@
-import { NextResponse } from "next/server";
+import { withWorkspaceAuth } from "@/lib/auth/route";
+import { NextRequest, NextResponse } from "next/server";
 import { fetchTeams } from "@/lib/data";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export const GET = withWorkspaceAuth(async (req: NextRequest, user) => {
   try {
     const teams = await fetchTeams();
     return NextResponse.json({ teams });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});
 
 interface CreateTeamBody {
   boardId: number | string;
@@ -27,7 +28,7 @@ interface CreateTeamBody {
  * POST /api/teams — cria/atualiza um time a partir de um board do Jira (upsert
  * por id `board-<id>`). Ligar um board no /config passa por aqui.
  */
-export async function POST(req: Request) {
+export const POST = withWorkspaceAuth(async (req: NextRequest, user) => {
   try {
     const body = (await req.json()) as Partial<CreateTeamBody>;
     const { boardId, name } = body;
@@ -64,13 +65,13 @@ export async function POST(req: Request) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});
 
 /**
  * DELETE /api/teams?id=board-123 — desliga o time (active=false). NÃO é hard
  * delete: dados de coaching/métricas fazem cascade e devem ser preservados.
  */
-export async function DELETE(req: Request) {
+export const DELETE = withWorkspaceAuth(async (req: NextRequest, user) => {
   try {
     const id = new URL(req.url).searchParams.get("id");
     if (!id) {
@@ -83,4 +84,4 @@ export async function DELETE(req: Request) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});

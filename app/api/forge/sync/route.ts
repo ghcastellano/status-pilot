@@ -35,14 +35,10 @@ export async function POST(req: Request) {
       /* sem corpo → todos os times ativos do tenant */
     }
 
-    // Prova de vida do asApp: quem é o app nesta instância (não deve 401 mesmo
-    // onde o 3LO batia). Barato e diagnóstico — é o "hello world" do spike.
-    const whoami = await jira.myself().catch((e: Error) => ({ error: e.message }));
-
     const result = await syncIssuesFromJira(teamId, jira, "forge-asApp");
-    return NextResponse.json({ ok: true, cloudId: ctx.cloudId, whoami, ...result });
+    return NextResponse.json({ ok: true, cloudId: ctx.cloudId, ...result });
   } catch (e) {
     const status = e instanceof ForgeAuthError ? e.status : 500;
-    return NextResponse.json({ ok: false, error: (e as Error).message }, { status });
+    return NextResponse.json({ ok: false, error: e instanceof ForgeAuthError ? e.message : "Unable to synchronize workspace." }, { status });
   }
 }

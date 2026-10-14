@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { withWorkspaceAuth } from "@/lib/auth/route";
+import { NextRequest, NextResponse } from "next/server";
 import { jiraProviderFromEnv } from "@/lib/jira";
 
 export const runtime = "nodejs";
@@ -23,7 +24,7 @@ interface JiraProject {
  * cai p/ busca de PROJETOS (/rest/api/3) com tipo "unknown" (detectado na
  * ingestão). Não conectado → 409.
  */
-export async function GET(req: Request) {
+export const GET = withWorkspaceAuth(async (req: NextRequest, user) => {
   const q = new URL(req.url).searchParams.get("q")?.trim() ?? "";
   try {
     const jira = jiraProviderFromEnv();
@@ -63,4 +64,4 @@ export async function GET(req: Request) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message, boards: [] }, { status: 409 });
   }
-}
+});

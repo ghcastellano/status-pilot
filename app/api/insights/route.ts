@@ -1,3 +1,5 @@
+import { checkRateLimit } from "@/lib/rate-limit";
+import { withWorkspaceAuth } from "@/lib/auth/route";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTeamData } from "@/lib/data";
 import { computeTeamMetrics, computeAnalysisBundle } from "@/lib/metrics";
@@ -11,7 +13,7 @@ export const dynamic = "force-dynamic";
 const INSIGHT_KEY = "__insight_v2__";
 const EMPTY = { cycleTime: "", secondary: "", flowEfficiency: "", predictability: "", chart: "" };
 
-export async function POST(req: NextRequest) {
+export const POST = withWorkspaceAuth(async (req: NextRequest, user) => {
   let body: any;
   try {
     body = await req.json();
@@ -49,6 +51,8 @@ export async function POST(req: NextRequest) {
       sprintId: sprintId && sprintId !== "all" ? sprintId : undefined,
     });
     const bundle = computeAnalysisBundle(metrics, issues, epicNames);
+    const limit = await checkRateLimit(user.id);
+    if (!limit.allowed) return NextResponse.json({error:"AI request limit reached."},{status:429});
     const insights = await generateMetricInsights(bundle, lang);
 
     // só cacheia se veio conteúdo (não cacheia fallback vazio → próximo load tenta de novo)
@@ -58,6 +62,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ insights, cached: false });
   } catch (e) {
     console.error("/api/insights:", (e as Error).message);
-    return NextResponse.json({ insights: EMPTY, cached: false }); // UI nunca quebra
+    return NextResponse.json({ error: "Analysis temporarily unavailable." }, {status:503});
   }
-}
+});

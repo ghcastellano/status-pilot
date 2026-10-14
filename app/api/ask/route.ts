@@ -1,15 +1,16 @@
+import { withWorkspaceAuth } from "@/lib/auth/route";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTeams, fetchTeamData } from "@/lib/data";
 import { computeTeamMetrics, computeAnalysisBundle } from "@/lib/metrics";
 import { validateQuestion, normalizeForCache, isValidTeamId } from "@/lib/validate";
-import { checkRateLimit, bucketFrom, RATE_LIMIT } from "@/lib/rate-limit";
+import { checkRateLimit, RATE_LIMIT } from "@/lib/rate-limit";
 import { getCachedAnswer, setCachedAnswer } from "@/lib/cache";
 import { answerAcrossTeams } from "@/lib/llm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
+export const POST = withWorkspaceAuth(async (req: NextRequest, user) => {
   let body: any;
   try {
     body = await req.json();
@@ -32,8 +33,7 @@ export async function POST(req: NextRequest) {
     if (cached) return NextResponse.json({ answer: cached, cached: true });
 
     // 2) rate limit (só quando vamos chamar o LLM)
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
-    const rl = await checkRateLimit(bucketFrom(ip, sessionId ?? null));
+    const rl = await checkRateLimit(user.id);
     if (!rl.allowed) {
       return NextResponse.json(
         { error: `Limite de ${RATE_LIMIT} perguntas por sessão atingido. Tente mais tarde.`, remaining: 0 },
@@ -59,4 +59,4 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});

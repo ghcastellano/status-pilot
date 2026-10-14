@@ -1,3 +1,4 @@
+import { withWorkspaceAuth } from "@/lib/auth/route";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTeamData } from "@/lib/data";
 import { computeTeamMetrics } from "@/lib/metrics";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 // Detalhe do time em UMA request: maturidade + histórico + plano + sinais +
 // experimentos + os dados dos charts de evidência.
-export async function GET(req: NextRequest) {
+export const GET = withWorkspaceAuth(async (req: NextRequest, user) => {
   const teamId = req.nextUrl.searchParams.get("teamId");
   if (!teamId) {
     return NextResponse.json({ error: "teamId é obrigatório" }, { status: 400 });
@@ -90,4 +91,4 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});

@@ -111,10 +111,7 @@ export async function storeMaturityHistory(
   issues: IssueRow[]
 ): Promise<number> {
   const rows = buildMaturityHistoryRows(team, sprints, issues);
-  await sb.from("metrics_history").delete().eq("team_id", team.id);
-  if (rows.length) {
-    const res = await sb.from("metrics_history").insert(rows);
-    if (res.error) throw new Error(`metrics_history ${team.id}: ${res.error.message}`);
-  }
+  const { error } = await sb.rpc("replace_team_history", { p_team: team.id, p_history: rows });
+  if (error) throw new Error("Unable to replace maturity history.");
   return rows.length;
 }
