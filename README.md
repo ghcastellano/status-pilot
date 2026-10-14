@@ -49,13 +49,13 @@ The sample workspace includes Scrum and Kanban teams, delivery metrics and chart
 
 An HTTP-only cookie selects the isolated API responder. All API routes are intercepted in this mode, and writes are rejected. No Jira, Supabase, or OpenAI requests are made by the sample responder. Browser histories use separate storage keys. Exit restores connected mode.
 
-For a **public demonstration deployment**, set `STATUS_PILOT_DEMO_ONLY=1` at build and runtime, and configure no live-service credentials. This locks the application to sample data even without a cookie; visitors cannot exit into live APIs. This option does not add authentication to connected mode.
+For a **public demonstration deployment**, set `STATUS_PILOT_DEMO_ONLY=1` at build and runtime, and configure no live-service credentials. This locks the application to sample data even without a cookie; visitors cannot exit into live APIs. Connected mode requires a verified, explicitly authorized Supabase Auth account.
 
 The separate seed scripts can create fictional Jira records for integration development. Do not run them against an operational Jira project.
 
 ## Data and project scope
 
-The current application is a development/demo implementation. Authentication and authorization for administrative APIs, tenant isolation, atomic rate limiting, and broader automated test coverage remain hardening priorities. The Forge integration is a spike, not a completed multi-tenant product.
+Connected mode serves one private workspace. Every member on the server-side allowlist can access its teams and Jira connection. This is not a multi-tenant SaaS permission model. Connected APIs verify Supabase Auth identities, mutations require the same origin, and database tables deny browser-role access. AI budgets and team snapshot replacement are transactional. Forge ingestion is restricted to one configured installation and cloud. See the [release prerequisites](docs/SECURITY_ROLLOUT.md) before deploying.
 
 ## Development
 
@@ -64,20 +64,21 @@ Install dependencies with `npm ci`, configure a private `.env.local`, and run `n
 | Configuration | Server-side variables |
 | --- | --- |
 | Database client | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
+| Workspace authentication | `SUPABASE_ANON_KEY`, `STATUS_PILOT_ALLOWED_USER_IDS` (or confirmed `STATUS_PILOT_ALLOWED_EMAILS`) |
 | Database administration scripts | `SUPABASE_DB_URL` |
 | AI features | `OPENAI_API_KEY` |
 | Jira connection | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
 | Seed project selection | `JIRA_PROJECT_KEY_SCRUM`, `JIRA_PROJECT_KEY_KANBAN` |
 
-Use a dedicated development database and Jira tenant. Environment values are intentionally not included in a template file. The schema bootstrap in `supabase/schema.sql` drops and recreates tables; it is not a production migration procedure.
+Use a dedicated development database and Jira tenant. Environment values are intentionally not included in a template file. `npm run db:schema` applies the non-destructive bootstrap and checksum-tracked migrations in a transaction. Take a backup and validate the migration against a staging database before production.
 
 ## Verification
 
-- `npm test`: offline regression tests for demo isolation, filtering, contracts, and calculations.
+- `npm test`: offline regression tests for demo isolation, translations, identity policy, database permissions, quotas, and transactional rollback.
 - `npm run typecheck`: TypeScript checking.
 - `npm run build`: Next.js build.
 - `npm run test:reconcile`: compares Jira data, database records, and calculated metrics; requires configured external services.
 
 CI runs the offline tests, type checking, and a production build without service credentials. The reconciliation script requires dedicated external services and is not run in CI.
 
-See [the engineering review](docs/ENGINEERING_REVIEW.md) for the connected-mode security gaps and verification scope.
+See [the engineering review](docs/ENGINEERING_REVIEW.md) for remaining work and verification scope.

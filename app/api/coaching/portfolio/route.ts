@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { withWorkspaceAuth } from "@/lib/auth/route";
+import { NextRequest, NextResponse } from "next/server";
 import { fetchTeams, fetchTeamData } from "@/lib/data";
 import { computeTeamMetrics } from "@/lib/metrics";
 import { computeMaturity } from "@/lib/maturity";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 // Portfolio inteiro em UMA request: maturidade ao vivo + histórico + engajamento
 // (status, working-on, behavioral, movimento) de cada time.
-export async function GET() {
+export const GET = withWorkspaceAuth(async (req: NextRequest, user) => {
   try {
     const teams = await fetchTeams();
     const boards = await Promise.all(
@@ -68,4 +69,4 @@ export async function GET() {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});

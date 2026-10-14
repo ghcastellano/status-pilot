@@ -24,12 +24,13 @@
     "@radix-ui/react-select": "^2.1.1",
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.14",
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.45.4",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "jose": "^5.9.6",
     "lucide-react": "^0.441.0",
-    "next": "^14.2.35",
+    "next": "^15.5.27",
     "next-themes": "^0.3.0",
     "openai": "^4.63.0",
     "pg": "^8.21.0",
@@ -40,15 +41,20 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.9",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20.16.5",
     "@types/pg": "^8.20.0",
     "@types/react": "^18.3.7",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
     "dotenv": "^16.4.5",
-    "postcss": "^8.4.47",
-    "tailwindcss": "^3.4.12",
+    "postcss": "^8.5.30",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2"
+  },
+  "overrides": {
+    "postcss": "$postcss"
   }
 }

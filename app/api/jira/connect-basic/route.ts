@@ -1,3 +1,4 @@
+import { withWorkspaceAuth } from "@/lib/auth/route";
 /**
  * POST /api/jira/connect-basic — conecta o Jira via Basic auth (email + API
  * token), como o formulário do Scrum Maturity Dashboard. Valida em /myself,
@@ -11,18 +12,18 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** DELETE /api/jira/connect-basic — desconecta (limpa a conexão armazenada). */
-export async function DELETE() {
+export const DELETE = withWorkspaceAuth(async (req: NextRequest, user) => {
   try {
     await clearJiraConnection();
     return NextResponse.json({ disconnected: true });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});
 
 const HOST_OK = /^[a-z0-9-]+\.atlassian\.net$/i;
 
-export async function POST(req: NextRequest) {
+export const POST = withWorkspaceAuth(async (req: NextRequest, user) => {
   let body: any;
   try {
     body = await req.json();
@@ -63,4 +64,4 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});

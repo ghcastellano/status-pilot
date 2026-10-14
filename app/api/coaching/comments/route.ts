@@ -1,3 +1,4 @@
+import { withWorkspaceAuth } from "@/lib/auth/route";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchCommentsForTeam, addComment, deleteComment } from "@/lib/coaching-db";
 
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
 const s = (v: unknown, max = 2000) =>
   typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null;
 
-export async function GET(req: NextRequest) {
+export const GET = withWorkspaceAuth(async (req: NextRequest, user) => {
   const teamId = req.nextUrl.searchParams.get("teamId");
   if (!teamId) {
     return NextResponse.json({ error: "teamId é obrigatório" }, { status: 400 });
@@ -18,9 +19,9 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withWorkspaceAuth(async (req: NextRequest, user) => {
   let body: any;
   try {
     body = await req.json();
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  const author = s(body?.author, 80) ?? "Coach";
+  const author = user.email ?? user.id;
   try {
     const comment = await addComment({
       experiment_id: experimentId,
@@ -48,9 +49,9 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});
 
-export async function DELETE(req: NextRequest) {
+export const DELETE = withWorkspaceAuth(async (req: NextRequest, user) => {
   const id = Number(req.nextUrl.searchParams.get("id"));
   if (!Number.isFinite(id) || id <= 0) {
     return NextResponse.json({ error: "id é obrigatório" }, { status: 400 });
@@ -61,4 +62,4 @@ export async function DELETE(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-}
+});

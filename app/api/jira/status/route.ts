@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { withWorkspaceAuth } from "@/lib/auth/route";
+import { NextRequest, NextResponse } from "next/server";
 import { getJiraConnection } from "@/lib/jira-connections";
 
 export const runtime = "nodejs";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
  * GET /api/jira/status — estado da conexão (Basic) com o Jira.
  * Nunca lança para o cliente: em qualquer erro devolve { connected: false }.
  */
-export async function GET() {
+export const GET = withWorkspaceAuth(async (req: NextRequest, user) => {
   try {
     const conn = await getJiraConnection();
     if (!conn) {
@@ -22,4 +23,4 @@ export async function GET() {
   } catch {
     return NextResponse.json({ connected: false, site_url: null, account_name: null });
   }
-}
+});

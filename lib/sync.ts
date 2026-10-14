@@ -1,3 +1,4 @@
+import { replaceTeamSnapshot } from "./snapshot";
 /**
  * lib/sync.ts — sincroniza as ISSUES do Jira para o Supabase (somente backend).
  * Reutilizável pela rota /api/sync (botão "Sincronizar agora") e pelos scripts.
@@ -69,12 +70,7 @@ export async function syncIssuesFromJira(
   for (const team of teams ?? []) {
     // Board REAL do Jira → ingestão via changelog. Sem board_id → path SPMETA (seed).
     if (team.jira_board_id) {
-      const count = await ingestBoard(jira, team as TeamRow);
-      // carimba QUEM sincronizou (basic = token/PoC, forge-asApp = pipeline Forge)
-      await sb
-        .from("teams")
-        .update({ last_synced_at: new Date().toISOString(), last_sync_source: source })
-        .eq("id", team.id);
+      const count = await ingestBoard(jira, team as TeamRow, source);
       byTeam.push({ team: team.id, count });
       continue;
     }
@@ -99,7 +95,7 @@ export async function syncIssuesFromJira(
       const liveStage = i.fields.status?.name ? normStageName(i.fields.status.name) : meta.current_stage;
       rows.push({
         id: i.key,
-        team_id: meta.team_id,
+        team_id: team.id,
         sprint_id: meta.sprint_id,
         epic_key: meta.epic,
         issue_key: i.key,
@@ -119,16 +115,12 @@ export async function syncIssuesFromJira(
         stages: meta.stages ?? [],
       });
     }
-    await sb.from("issues").delete().eq("team_id", team.id);
-    for (let k = 0; k < rows.length; k += 200) {
-      const res = await sb.from("issues").insert(rows.slice(k, k + 200));
-      if (res.error) throw new Error(`issues ${pk}: ${res.error.message}`);
-    }
+    await replaceTeamSnapshot(team.id, rows, null, null, source);
     byTeam.push({ team: team.id, count: rows.length });
   }
 
   // dados mudaram → invalida o cache de respostas/insights/reports
-  await sb.from("qa_cache").delete().gte("id", 0);
+  // Each successful snapshot invalidates only its own cache inside the transaction.
 
   return { byTeam, total: byTeam.reduce((a, b) => a + b.count, 0) };
 }

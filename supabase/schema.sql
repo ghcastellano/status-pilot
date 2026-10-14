@@ -1,25 +1,12 @@
 -- ─────────────────────────────────────────────────────────────
 -- Status Pilot — schema do Supabase (Postgres)
 -- Modela o fluxo dual-track de 10 estágios lido do Jira (via SPMETA).
--- Idempotente: seguro re-rodar.
+-- Non-destructive bootstrap. Follow with versioned migrations.
 -- ─────────────────────────────────────────────────────────────
 
-drop table if exists experiment_comments cascade;
-drop table if exists coaching_field_history cascade;
-drop table if exists jira_connections cascade;
-drop table if exists coaching_experiments cascade;
-drop table if exists coaching_assessments cascade;
-drop table if exists coaching_plans cascade;
-drop table if exists metrics_history cascade;
-drop table if exists qa_cache cascade;
-drop table if exists rate_limits cascade;
-drop table if exists issues cascade;
-drop table if exists epics cascade;
-drop table if exists sprints cascade;
-drop table if exists teams cascade;
 
 -- Times = projetos/boards no Jira (um Scrum, um Kanban)
-create table teams (
+create table if not exists teams (
   id            text primary key,            -- 'espresso' | 'coldbrew' | 'board-123'
   name          text not null,
   board_type    text not null check (board_type in ('scrum','kanban')),
@@ -34,7 +21,7 @@ create table teams (
 );
 
 -- Épicos (features) — agrupam issues
-create table epics (
+create table if not exists epics (
   team_id   text not null references teams(id) on delete cascade,
   epic_key  text not null,                    -- 'loyalty', 'checkout', ...
   name      text not null,
@@ -44,7 +31,7 @@ create table epics (
 );
 
 -- Sprints (time Scrum)
-create table sprints (
+create table if not exists sprints (
   id                text primary key,         -- 'S-16'
   team_id           text not null references teams(id) on delete cascade,
   name              text not null,
@@ -58,12 +45,12 @@ create table sprints (
 );
 
 -- Issues = tickets do Jira (lidos via API). Timeline dual-track por estágio.
-create table issues (
+create table if not exists issues (
   id                    text primary key,     -- = issue_key do Jira
   team_id               text not null references teams(id) on delete cascade,
   sprint_id             text references sprints(id) on delete set null,
   epic_key              text,                 -- referencia epics(epic_key) do time
-  issue_key             text not null unique,
+  issue_key             text not null,
   title                 text not null,
   type                  text not null check (type in ('story','bug','task')),
   status                text not null check (status in ('To Do','In Progress','Done')),
@@ -81,13 +68,13 @@ create table issues (
   stages                jsonb not null default '[]'::jsonb  -- [{key,jira,kind,at}]
 );
 
-create index issues_team_idx     on issues(team_id);
-create index issues_sprint_idx   on issues(sprint_id);
-create index issues_released_idx on issues(released_at);
-create index issues_stage_idx    on issues(current_stage);
+create index if not exists issues_team_idx     on issues(team_id);
+create index if not exists issues_sprint_idx   on issues(sprint_id);
+create index if not exists issues_released_idx on issues(released_at);
+create index if not exists issues_stage_idx    on issues(current_stage);
 
 -- Cache de perguntas → respostas da IA (protege custo da chave)
-create table qa_cache (
+create table if not exists qa_cache (
   id             bigint generated always as identity primary key,
   team_id        text not null references teams(id) on delete cascade,
   question_norm  text not null,
@@ -97,7 +84,7 @@ create table qa_cache (
 );
 
 -- Rate limiting por IP + sessão (janela deslizante)
-create table rate_limits (
+create table if not exists rate_limits (
   id            bigint generated always as identity primary key,
   bucket_key    text not null unique,
   count         int not null default 0,
@@ -111,7 +98,7 @@ create table rate_limits (
 -- Histórico de maturidade: 1 snapshot por time por semana (replay da timeline
 -- sintética + snapshots futuros). `metrics` guarda o MaturityResult inteiro,
 -- permitindo re-derivar tiers após recalibração de thresholds sem re-replay.
-create table metrics_history (
+create table if not exists metrics_history (
   team_id      text not null references teams(id) on delete cascade,
   as_of        date not null,               -- data de corte do snapshot
   board_type   text not null check (board_type in ('scrum','kanban')),
@@ -120,10 +107,10 @@ create table metrics_history (
   computed_at  timestamptz not null default now(),
   primary key (team_id, as_of)
 );
-create index metrics_history_team_idx on metrics_history(team_id, as_of desc);
+create index if not exists metrics_history_team_idx on metrics_history(team_id, as_of desc);
 
 -- Plano de coaching: 1 por time (gap, hipótese, próximo passo, ask, check-in)
-create table coaching_plans (
+create table if not exists coaching_plans (
   team_id     text primary key references teams(id) on delete cascade,
   coaching    boolean not null default true,
   coach       text,
@@ -137,7 +124,7 @@ create table coaching_plans (
 );
 
 -- Sinais comportamentais (pilar Ownership): última avaliação por time
-create table coaching_assessments (
+create table if not exists coaching_assessments (
   team_id     text primary key references teams(id) on delete cascade,
   signals     jsonb not null default '{}'::jsonb, -- {key: not_yet|emerging|consistent}
   note        text,
@@ -145,7 +132,7 @@ create table coaching_assessments (
 );
 
 -- Experimentos / intervenções de coaching
-create table coaching_experiments (
+create table if not exists coaching_experiments (
   id          bigint generated always as identity primary key,
   team_id     text not null references teams(id) on delete cascade,
   pillar      text not null check (pillar in ('flow','quality','ownership')),
@@ -156,12 +143,12 @@ create table coaching_experiments (
   status      text not null default 'active' check (status in ('active','done','dropped')),
   created_at  timestamptz not null default now()
 );
-create index coaching_experiments_team_idx on coaching_experiments(team_id, created_at desc);
+create index if not exists coaching_experiments_team_idx on coaching_experiments(team_id, created_at desc);
 
 -- Comentários / registros de um experimento ao longo do tempo (thread simples).
 -- Vários por experimento — é o "log de resultados" que evolui, distinto do
 -- campo único `outcome`. Sem auth no app ⇒ autor é texto livre.
-create table experiment_comments (
+create table if not exists experiment_comments (
   id            bigint generated always as identity primary key,
   experiment_id bigint not null references coaching_experiments(id) on delete cascade,
   team_id       text not null references teams(id) on delete cascade,
@@ -169,12 +156,12 @@ create table experiment_comments (
   body          text not null,
   created_at    timestamptz not null default now()
 );
-create index experiment_comments_exp_idx on experiment_comments(experiment_id, created_at asc);
-create index experiment_comments_team_idx on experiment_comments(team_id, created_at asc);
+create index if not exists experiment_comments_exp_idx on experiment_comments(experiment_id, created_at asc);
+create index if not exists experiment_comments_team_idx on experiment_comments(team_id, created_at asc);
 
 -- Histórico de mudanças por CAMPO: 1 linha por valor que MUDOU de fato (old→new).
 -- Cobre plano, experimentos e sinais. Alimenta o painel "histórico inteligente".
-create table coaching_field_history (
+create table if not exists coaching_field_history (
   id           bigint generated always as identity primary key,
   team_id      text not null references teams(id) on delete cascade,
   section      text not null check (section in ('plan','experiment','signal')),
@@ -186,11 +173,11 @@ create table coaching_field_history (
   changed_by   text not null,
   changed_at   timestamptz not null default now()
 );
-create index coaching_field_history_team_idx on coaching_field_history(team_id, changed_at desc);
+create index if not exists coaching_field_history_team_idx on coaching_field_history(team_id, changed_at desc);
 
 -- Conexão OAuth 2.0 (3LO) com o Jira. Linha única (id='default') para o site
 -- conectado; tokens guardados no backend (service_role), nunca no frontend.
-create table jira_connections (
+create table if not exists jira_connections (
   id            text primary key default 'default',
   auth_type     text not null default 'oauth',  -- 'oauth' | 'basic'
   site_url      text not null,
