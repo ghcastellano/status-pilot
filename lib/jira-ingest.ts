@@ -10,7 +10,7 @@ import { replaceTeamSnapshot } from "./snapshot";
  * métricas já consome.
  */
 import type { JiraProvider, JiraIssue } from "./jira";
-import { getSupabaseAdmin } from "./supabase";
+import { getDatabase } from "./db";
 import type { IssueRow, SprintRow, StageStamp, IssueType, IssueStatus, TeamRow } from "./metrics";
 import { buildMaturityHistoryRows } from "./maturity-history";
 
@@ -318,7 +318,7 @@ async function boardJql(jira: JiraProvider, boardId: string): Promise<string | n
  */
 export async function ingestBoard(jira: JiraProvider, team: TeamRow, source = "basic"): Promise<number> {
   const projectKey = team.jira_project_key;
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
 
   const numericBoard = /^\d+$/.test(team.jira_board_id ?? "");
   const [spFields, sprintField, catOf, boardScope] = await Promise.all([

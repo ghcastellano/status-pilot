@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { User } from '@supabase/supabase-js';
+import type { VerifiedIdentity } from './policy';
 import { authConfigured, workspaceUser } from './server';
 import { sameOrigin } from './policy';
 import { DEMO_COOKIE, DEMO_VERSION, isDemoOnly } from '../demo/session';
 import { respondToDemo } from '../demo/data';
 
 const json = (error: string, status: number) => NextResponse.json({ error }, { status, headers: { 'Cache-Control': 'no-store' } });
-export function withWorkspaceAuth(handler: (req: NextRequest, user: User) => Promise<Response>) {
+export function withWorkspaceAuth(handler: (req: NextRequest, user: VerifiedIdentity) => Promise<Response>) {
   return async (req: NextRequest): Promise<Response> => {
     // Defense in depth: demo isolation also holds when middleware is bypassed.
     if (isDemoOnly() || req.cookies.get(DEMO_COOKIE)?.value === DEMO_VERSION) {

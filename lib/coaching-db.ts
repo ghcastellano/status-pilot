@@ -1,7 +1,7 @@
 /**
- * lib/coaching-db.ts — acesso às tabelas de coaching no Supabase (SOMENTE backend).
+ * lib/coaching-db.ts — acesso às tabelas de coaching no Neon (SOMENTE backend).
  */
-import { getSupabaseAdmin } from "./supabase";
+import { getDatabase } from "./db";
 import type { MaturityResult, Tier } from "./maturity";
 import type { CoachingPlan, Experiment } from "./coaching";
 
@@ -14,23 +14,15 @@ export interface HistoryRow {
 }
 
 export async function fetchHistory(teamId: string): Promise<HistoryRow[]> {
-  const sb = getSupabaseAdmin();
-  const { data, error } = await sb
-    .from("metrics_history")
-    .select("team_id, as_of, board_type, tier, metrics")
-    .eq("team_id", teamId)
-    .order("as_of");
+  const sb = getDatabase();
+  const { data, error } = await sb.select("metrics_history", { orderBy: "as_of", ascending: true, where: { ["team_id"]: teamId }, columns: "team_id, as_of, board_type, tier, metrics" });
   if (error) throw new Error(error.message);
   return (data ?? []) as HistoryRow[];
 }
 
 export async function fetchPlan(teamId: string): Promise<CoachingPlan | null> {
-  const sb = getSupabaseAdmin();
-  const { data, error } = await sb
-    .from("coaching_plans")
-    .select("*")
-    .eq("team_id", teamId)
-    .maybeSingle();
+  const sb = getDatabase();
+  const { data, error } = await sb.select("coaching_plans", { single: 'optional', where: { ["team_id"]: teamId }, columns: "*" });
   if (error) throw new Error(error.message);
   return (data ?? null) as CoachingPlan | null;
 }
@@ -41,7 +33,7 @@ export async function savePlan(
   patch: Partial<Omit<CoachingPlan, "team_id">>,
   changedBy = "—"
 ): Promise<CoachingPlan> {
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
   const existing = await fetchPlan(teamId);
   const row = {
     ...(existing ?? { coaching: true }),
@@ -51,11 +43,7 @@ export async function savePlan(
     engaged_at: existing?.engaged_at ?? new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
-  const { data, error } = await sb
-    .from("coaching_plans")
-    .upsert(row, { onConflict: "team_id" })
-    .select()
-    .single();
+  const { data, error } = await sb.upsert("coaching_plans", row, { onConflict: "team_id", single: 'required' });
   if (error) throw new Error(error.message);
   await recordFieldHistory(
     teamId,
@@ -72,12 +60,8 @@ export interface Assessment {
 }
 
 export async function fetchAssessment(teamId: string): Promise<Assessment | null> {
-  const sb = getSupabaseAdmin();
-  const { data, error } = await sb
-    .from("coaching_assessments")
-    .select("team_id, signals, note")
-    .eq("team_id", teamId)
-    .maybeSingle();
+  const sb = getDatabase();
+  const { data, error } = await sb.select("coaching_assessments", { single: 'optional', where: { ["team_id"]: teamId }, columns: "team_id, signals, note" });
   if (error) throw new Error(error.message);
   return (data ?? null) as Assessment | null;
 }
@@ -88,16 +72,9 @@ export async function saveAssessment(
   note: string | null,
   changedBy = "—"
 ): Promise<Assessment> {
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
   const existing = await fetchAssessment(teamId);
-  const { data, error } = await sb
-    .from("coaching_assessments")
-    .upsert(
-      { team_id: teamId, signals, note, updated_at: new Date().toISOString() },
-      { onConflict: "team_id" }
-    )
-    .select("team_id, signals, note")
-    .single();
+  const { data, error } = await sb.upsert("coaching_assessments", { team_id: teamId, signals, note, updated_at: new Date().toISOString() }, { onConflict: "team_id", single: 'required', columns: "team_id, signals, note" });
   if (error) throw new Error(error.message);
   // Diff: 1 entrada por sinal que mudou de fato, + a nota.
   const entries: FieldHistoryEntry[] = [];
@@ -115,12 +92,8 @@ export async function saveAssessment(
 }
 
 export async function fetchExperiments(teamId: string): Promise<Experiment[]> {
-  const sb = getSupabaseAdmin();
-  const { data, error } = await sb
-    .from("coaching_experiments")
-    .select("*")
-    .eq("team_id", teamId)
-    .order("created_at", { ascending: false });
+  const sb = getDatabase();
+  const { data, error } = await sb.select("coaching_experiments", { orderBy: "created_at", ascending: false, where: { ["team_id"]: teamId }, columns: "*" });
   if (error) throw new Error(error.message);
   return (data ?? []) as Experiment[];
 }
@@ -129,21 +102,12 @@ export async function saveExperiment(
   exp: Partial<Experiment> & { team_id: string; behavior: string; pillar: string },
   changedBy = "—"
 ): Promise<Experiment> {
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
   if (exp.id != null) {
     const { id, team_id: _t, created_at: _c, ...patch } = exp;
     // snapshot ANTES do update para diferenciar campo a campo
-    const { data: before } = await sb
-      .from("coaching_experiments")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
-    const { data, error } = await sb
-      .from("coaching_experiments")
-      .update(patch)
-      .eq("id", id)
-      .select()
-      .single();
+    const { data: before } = await sb.select("coaching_experiments", { single: 'optional', where: { ["id"]: id }, columns: "*" });
+    const { data, error } = await sb.update("coaching_experiments", patch, { single: 'required', where: { ["id"]: id } });
     if (error) throw new Error(error.message);
     if (before) {
       await recordFieldHistory(
@@ -157,9 +121,7 @@ export async function saveExperiment(
     }
     return data as Experiment;
   }
-  const { data, error } = await sb
-    .from("coaching_experiments")
-    .insert({
+  const { data, error } = await sb.insert("coaching_experiments", {
       team_id: exp.team_id,
       pillar: exp.pillar,
       metric: exp.metric ?? null,
@@ -167,9 +129,7 @@ export async function saveExperiment(
       hypothesis: exp.hypothesis ?? null,
       outcome: exp.outcome ?? null,
       status: exp.status ?? "active",
-    })
-    .select()
-    .single();
+    }, { single: 'required' });
   if (error) throw new Error(error.message);
   const created = data as Experiment;
   await recordFieldHistory(exp.team_id, changedBy, [
@@ -179,13 +139,9 @@ export async function saveExperiment(
 }
 
 export async function deleteExperiment(id: number, changedBy = "—"): Promise<void> {
-  const sb = getSupabaseAdmin();
-  const { data: before } = await sb
-    .from("coaching_experiments")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  const { error } = await sb.from("coaching_experiments").delete().eq("id", id);
+  const sb = getDatabase();
+  const { data: before } = await sb.select("coaching_experiments", { single: 'optional', where: { ["id"]: id }, columns: "*" });
+  const { error } = await sb.delete("coaching_experiments", { where: { ["id"]: id } });
   if (error) throw new Error(error.message);
   const b = before as { team_id?: string; behavior?: string } | null;
   if (b?.team_id) {
@@ -208,13 +164,9 @@ export interface ExperimentComment {
 /** Todos os comentários dos experimentos do time, cronológico (antigo→novo).
  *  Resiliente: se a tabela ainda não existe (schema não aplicado), retorna []. */
 export async function fetchCommentsForTeam(teamId: string): Promise<ExperimentComment[]> {
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
   try {
-    const { data, error } = await sb
-      .from("experiment_comments")
-      .select("*")
-      .eq("team_id", teamId)
-      .order("created_at", { ascending: true });
+    const { data, error } = await sb.select("experiment_comments", { orderBy: "created_at", ascending: true, where: { ["team_id"]: teamId }, columns: "*" });
     if (error) throw error;
     return (data ?? []) as ExperimentComment[];
   } catch (e) {
@@ -229,24 +181,20 @@ export async function addComment(input: {
   author: string;
   body: string;
 }): Promise<ExperimentComment> {
-  const sb = getSupabaseAdmin();
-  const { data, error } = await sb
-    .from("experiment_comments")
-    .insert({
+  const sb = getDatabase();
+  const { data, error } = await sb.insert("experiment_comments", {
       experiment_id: input.experiment_id,
       team_id: input.team_id,
       author: input.author,
       body: input.body,
-    })
-    .select()
-    .single();
+    }, { single: 'required' });
   if (error) throw new Error(error.message);
   return data as ExperimentComment;
 }
 
 export async function deleteComment(id: number): Promise<void> {
-  const sb = getSupabaseAdmin();
-  const { error } = await sb.from("experiment_comments").delete().eq("id", id);
+  const sb = getDatabase();
+  const { error } = await sb.delete("experiment_comments", { where: { ["id"]: id } });
   if (error) throw new Error(error.message);
 }
 
@@ -311,7 +259,7 @@ export async function recordFieldHistory(
   entries: FieldHistoryEntry[]
 ): Promise<void> {
   if (!entries.length) return;
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
   try {
     const rows = entries.map((e) => ({
       team_id: teamId,
@@ -323,7 +271,7 @@ export async function recordFieldHistory(
       new_value: e.new_value,
       changed_by: changedBy || "—",
     }));
-    const { error } = await sb.from("coaching_field_history").insert(rows);
+    const { error } = await sb.insert("coaching_field_history", rows, {  });
     if (error) throw error;
   } catch (e) {
     console.warn("recordFieldHistory:", (e as Error).message);
@@ -332,14 +280,9 @@ export async function recordFieldHistory(
 
 /** Histórico do time, mais recente primeiro. Resiliente a tabela ausente. */
 export async function fetchFieldHistory(teamId: string, limit = 200): Promise<FieldHistoryRow[]> {
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
   try {
-    const { data, error } = await sb
-      .from("coaching_field_history")
-      .select("*")
-      .eq("team_id", teamId)
-      .order("changed_at", { ascending: false })
-      .limit(limit);
+    const { data, error } = await sb.select("coaching_field_history", { orderBy: "changed_at", ascending: false, limit: limit, where: { ["team_id"]: teamId }, columns: "*" });
     if (error) throw error;
     return (data ?? []) as FieldHistoryRow[];
   } catch (e) {

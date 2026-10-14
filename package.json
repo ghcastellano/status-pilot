@@ -13,7 +13,7 @@
     "jira:sprints": "tsx scripts/setup-jira-sprints.ts",
     "jira:restage": "tsx scripts/restage-jira.ts",
     "db:schema": "tsx scripts/apply-schema.ts",
-    "db:sync": "tsx scripts/sync-jira-to-supabase.ts",
+    "db:sync": "tsx scripts/sync-jira-to-postgres.ts",
     "db:replay": "tsx scripts/replay-maturity-history.ts",
     "db:seed:coaching": "tsx scripts/seed-coaching-demo.ts",
     "test:reconcile": "tsx scripts/test-reconcile.ts",
@@ -21,16 +21,16 @@
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@neondatabase/auth": "^0.6.0-beta",
     "@radix-ui/react-select": "^2.1.1",
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.14",
-    "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.45.4",
+    "@vercel/functions": "^3.10.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "jose": "^5.9.6",
     "lucide-react": "^0.441.0",
-    "next": "^15.5.27",
+    "next": "^16.4.0",
     "next-themes": "^0.3.0",
     "openai": "^4.63.0",
     "pg": "^8.21.0",
@@ -38,7 +38,8 @@
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7",
     "tailwind-merge": "^2.5.2",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.9",

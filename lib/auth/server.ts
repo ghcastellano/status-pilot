@@ -1,24 +1,17 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import { allowedIdentity } from './policy';
-
+import { createNeonAuth } from '@neondatabase/auth/next/server';
+import { allowedIdentity, type VerifiedIdentity } from './policy';
 export function authConfigured() {
-  return Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) &&
-    (process.env.STATUS_PILOT_ALLOWED_USER_IDS?.trim() || process.env.STATUS_PILOT_ALLOWED_EMAILS?.trim()));
+  return Boolean(process.env.NEON_AUTH_BASE_URL && process.env.NEON_AUTH_COOKIE_SECRET && process.env.STATUS_PILOT_ALLOWED_EMAILS?.trim());
 }
-export async function sessionClient() {
+let cached: ReturnType<typeof createNeonAuth> | undefined;
+export function sessionClient() {
   if (!authConfigured()) throw new Error('Workspace authentication is not configured');
-  const jar = await cookies();
-  return createServerClient(process.env.SUPABASE_URL!,
-    (process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)!, {
-      cookieOptions: { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' },
-      cookies: { getAll: () => jar.getAll(), setAll: values => { for (const {name,value,options} of values) jar.set(name,value,options); } },
-    });
+  return cached ??= createNeonAuth({baseUrl:process.env.NEON_AUTH_BASE_URL!,cookies:{secret:process.env.NEON_AUTH_COOKIE_SECRET!,sessionDataTtl:60}});
 }
-export async function workspaceUser() {
-  const client = await sessionClient();
-  // getUser verifies the token against Supabase Auth; never trust the cookie payload alone.
-  const { data: { user }, error } = await client.auth.getUser();
-  if (error || !allowedIdentity(user, process.env.STATUS_PILOT_ALLOWED_USER_IDS, process.env.STATUS_PILOT_ALLOWED_EMAILS)) return null;
-  return user;
+export async function workspaceUser(): Promise<VerifiedIdentity | null> {
+  const {data,error} = await sessionClient().getSession({query:{disableCookieCache:"true"}});
+  const user=data?.user;
+  if(error || !user)return null;
+  const identity:VerifiedIdentity={id:user.id,email:user.email,email_confirmed_at:user.emailVerified?'verified':undefined};
+  return allowedIdentity(identity,process.env.STATUS_PILOT_ALLOWED_USER_IDS,process.env.STATUS_PILOT_ALLOWED_EMAILS)?identity:null;
 }

@@ -1,6 +1,6 @@
 /**
  * scripts/check-connections.ts
- * Verifica credenciais do Jira e do Supabase (sem imprimir segredos) e
+ * Verifica credenciais do Jira e do Neon (sem imprimir segredos) e
  * descobre os tipos de issue + status disponíveis nos projetos LS e LK.
  *
  * Rodar:  npx tsx scripts/check-connections.ts
@@ -9,7 +9,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import { JiraClient, jiraConfigFromEnv } from "../lib/jira";
-import { getSupabaseAdmin } from "../lib/supabase";
+import { getDatabase } from "../lib/db";
 
 function mask(v: string | undefined): string {
   if (!v) return "(vazio)";
@@ -46,17 +46,12 @@ async function checkJira() {
   }
 }
 
-async function checkSupabase() {
-  console.log("\n── SUPABASE ─────────────────────────────────");
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  console.log("url:", url || "(vazio)", "| service_role:", mask(key));
-  if (!url || !key) {
-    console.log("✗ faltam SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
-    return;
-  }
-  const sb = getSupabaseAdmin();
-  const { error } = await sb.from("teams").select("id").limit(1);
+async function checkDatabase() {
+  console.log("\n── NEON / POSTGRESQL ─────────────────────────────────");
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
+  console.log('Database URL configured; checking connectivity.');
+  const sb = getDatabase();
+  const { error } = await sb.select("teams", { limit: 1, columns: "id" });
   if (error) {
     if (/relation .* does not exist|Could not find the table/i.test(error.message)) {
       console.log("✓ conectado — mas o schema ainda não foi aplicado (rode schema.sql).");
@@ -77,10 +72,10 @@ async function main() {
     console.log("✗ Jira falhou:", (e as Error).message);
   }
   try {
-    await checkSupabase();
+    await checkDatabase();
   } catch (e) {
     ok = false;
-    console.log("✗ Supabase falhou:", (e as Error).message);
+    console.log("✗ Neon falhou:", (e as Error).message);
   }
   console.log("\n" + (ok ? "Pronto." : "Houve erros — veja acima."));
   process.exit(ok ? 0 : 1);

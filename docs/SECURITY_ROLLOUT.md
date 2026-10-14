@@ -1,18 +1,14 @@
 # Connected workspace rollout
 
-The security release requires database and authentication configuration before promotion. It has not been applied to the production database by this review.
+1. Use a dedicated Neon project and a separate branch for migration and preview tests.
+2. Provision a `status_pilot_runtime` login role. Apply `db/schema.sql` and the versioned migrations through `npm run db:schema`, with `DATABASE_URL_UNPOOLED` set to a direct owner connection.
+3. Set the production pooled `DATABASE_URL` to the restricted application role, with TLS verification enabled. Never use the owner role in the application.
+4. Enable Neon Auth, register the exact production origin, and configure `NEON_AUTH_BASE_URL`, a random `NEON_AUTH_COOKIE_SECRET` of at least 32 characters, and `STATUS_PILOT_ALLOWED_EMAILS`.
+5. For connected mode set `STATUS_PILOT_DEMO_ONLY=0`. Keep previews locked to `STATUS_PILOT_DEMO_ONLY=1` unless they have isolated test credentials.
+6. Check authorized sign-in, session restoration, sign-out, direct unauthenticated API rejection, same-origin mutation checks, sample data isolation, and Coaching Hub persistence.
 
-1. Back up the workspace database and restore it into staging. Use a dedicated Supabase project for previews; never share production service-role credentials.
-2. Set `SUPABASE_DB_URL` privately and run `npm run db:schema` against staging. The runner applies the bootstrap and migrations within one transaction, records checksums, and rejects edits to applied migrations. It requires a database administrator; HTTP API keys cannot run DDL.
-3. Configure Supabase Auth with an existing confirmed account. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` on the server. Set `STATUS_PILOT_ALLOWED_USER_IDS` to that user's immutable ID. A comma-separated list of confirmed emails is an alternative. Never put service-role keys in `NEXT_PUBLIC_*` values.
-4. Exercise login, unauthorized access, Jira synchronization, coaching updates, and AI budget exhaustion against staging. All authorized users share one workspace; resource-level membership is outside this release.
-5. Apply the migration to production, configure the authorized accounts, then promote the matching application commit. Missing authentication configuration returns 503 for connected APIs. Missing RPCs fail closed. The sample workspace remains usable without these services.
-6. Verify anonymous access is rejected, authorized access succeeds, and the sample workspace makes no provider calls. Inspect logs for sanitized failure events and verify a previous snapshot survives a failed sync.
+Neon Auth sends sign-in codes only when the user submits the login form. The application allowlist requires a verified email and does not expose an unrestricted auth proxy. Neon manages OTP expiry, retry limits and delivery. Configure a custom SMTP provider before scaling email delivery beyond this private installation.
 
-## Optional Forge integration
+All 13 application tables have RLS. Only the server role has application data permissions; browser roles receive none. The server role cannot create or truncate tables, alter schema, or read the migration ledger. Atomic snapshot functions and AI quotas retain their transaction boundaries.
 
-`FORGE_REMOTE_AUDIENCE` must be the Forge **app ARI** (`ari:cloud:ecosystem::app/...`), not the backend URL. Configure `FORGE_ALLOWED_CLOUD_ID` and `FORGE_ALLOWED_INSTALLATION_ID` from the trusted installation. JWT signature, issuer, audience, expiry, cloud, installation, and canonical Jira API URL are checked. Missing configuration disables the endpoint.
-
-## Release status
-
-Local tests, TypeScript checks, and a production build passed. No live account was created, migration applied, provider request made, or production configuration changed in this security release. Vercel's team-scoped environment request returned 403, and no authenticated CLI or Supabase administration connection was available. These are rollout prerequisites, not completed production work.
+The original Supabase project is inaccessible. Creating the Neon schema does not recover old data or Jira credentials. Keep the original project and any backups until a separately verified import succeeds.

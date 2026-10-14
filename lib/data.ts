@@ -1,13 +1,13 @@
 /**
- * lib/data.ts — leitura dos dados do Supabase (somente backend).
+ * lib/data.ts — leitura dos dados do Neon (somente backend).
  */
-import { getSupabaseAdmin } from "./supabase";
+import { getDatabase } from "./db";
 import type { TeamRow, SprintRow, IssueRow } from "./metrics";
 
 /** Times ATIVOS (deselecionados no /config ficam active=false e somem das telas). */
 export async function fetchTeams(): Promise<TeamRow[]> {
-  const sb = getSupabaseAdmin();
-  const { data, error } = await sb.from("teams").select("*").eq("active", true).order("name");
+  const sb = getDatabase();
+  const { data, error } = await sb.select("teams", { orderBy: "name", ascending: true, where: { ["active"]: true }, columns: "*" });
   if (error) throw new Error(error.message);
   return (data ?? []) as TeamRow[];
 }
@@ -17,12 +17,12 @@ export interface EpicRow { team_id: string; epic_key: string; name: string; summ
 export async function fetchTeamData(
   teamId: string
 ): Promise<{ team: TeamRow | null; sprints: SprintRow[]; issues: IssueRow[]; epics: EpicRow[] }> {
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
   const [teamRes, sprintsRes, issuesRes, epicsRes] = await Promise.all([
-    sb.from("teams").select("*").eq("id", teamId).maybeSingle(),
-    sb.from("sprints").select("*").eq("team_id", teamId),
-    sb.from("issues").select("*").eq("team_id", teamId),
-    sb.from("epics").select("*").eq("team_id", teamId),
+    sb.select("teams", { single: 'optional', where: { ["id"]: teamId }, columns: "*" }),
+    sb.select("sprints", { where: { ["team_id"]: teamId }, columns: "*" }),
+    sb.select("issues", { where: { ["team_id"]: teamId }, columns: "*" }),
+    sb.select("epics", { where: { ["team_id"]: teamId }, columns: "*" }),
   ]);
   for (const r of [teamRes, sprintsRes, issuesRes, epicsRes])
     if (r.error) throw new Error(r.error.message);

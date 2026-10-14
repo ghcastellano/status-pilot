@@ -208,7 +208,7 @@
   "Clique em “Create and manage API tokens”.": "Click “Create and manage API tokens”.",
   "Clique em “Create API token”.": "Click “Create API token”.",
   "Copie e cole acima.": "Copy and paste it above.",
-  "As credenciais ficam no servidor (Supabase), usadas só para ler o seu Jira. Você pode desconectar quando quiser.": "Credentials stay on the server (Supabase) and are used only to read your Jira data. You can disconnect at any time.",
+  "As credenciais ficam no servidor (Neon), usadas só para ler o seu Jira. Você pode desconectar quando quiser.": "Credentials stay on the server (Neon) and are used only to read your Jira data. You can disconnect at any time.",
   "Boards → times": "Boards → teams",
   "time configurado": "configured team",
   "times configurados": "configured teams",

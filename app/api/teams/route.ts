@@ -1,7 +1,7 @@
 import { withWorkspaceAuth } from "@/lib/auth/route";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTeams } from "@/lib/data";
-import { getSupabaseAdmin } from "@/lib/supabase";
+import { getDatabase } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,12 +53,8 @@ export const POST = withWorkspaceAuth(async (req: NextRequest, user) => {
       description: body.projectName ? `${body.projectName} · board ${boardId}` : null,
     };
 
-    const sb = getSupabaseAdmin();
-    const { data, error } = await sb
-      .from("teams")
-      .upsert(row, { onConflict: "id" })
-      .select()
-      .single();
+    const sb = getDatabase();
+    const { data, error } = await sb.upsert("teams", row, { onConflict: "id", single: 'required' });
     if (error) throw new Error(error.message);
 
     return NextResponse.json({ team: data });
@@ -77,8 +73,8 @@ export const DELETE = withWorkspaceAuth(async (req: NextRequest, user) => {
     if (!id) {
       return NextResponse.json({ error: "id é obrigatório." }, { status: 400 });
     }
-    const sb = getSupabaseAdmin();
-    const { error } = await sb.from("teams").update({ active: false }).eq("id", id);
+    const sb = getDatabase();
+    const { error } = await sb.update("teams", { active: false }, { where: { ["id"]: id } });
     if (error) throw new Error(error.message);
     return NextResponse.json({ deactivated: 1 });
   } catch (e) {

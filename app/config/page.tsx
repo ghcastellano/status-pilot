@@ -322,7 +322,7 @@ export default function ConfigPage() {
   }
 
   // Auto-sync em background do time recém-selecionado (não bloqueia a UI). O
-  // dado fica salvo no Supabase — na próxima abertura já carrega do banco.
+  // dado fica salvo no Neon — na próxima abertura já carrega do banco.
   async function autoSync(teamId: string) {
     setSyncingTeams((s) => ({ ...s, [teamId]: true }));
     try {
@@ -483,7 +483,7 @@ export default function ConfigPage() {
 
               {/* Nota de segurança */}
               <p className="text-xs text-muted-foreground">
-                {tx("As credenciais ficam no servidor (Supabase), usadas só para ler o seu Jira. Você pode desconectar quando quiser.")}</p>
+                {tx("As credenciais ficam no servidor (Neon), usadas só para ler o seu Jira. Você pode desconectar quando quiser.")}</p>
             </div>
           )}
         </CardContent>
