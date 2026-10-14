@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEMO_COOKIE, DEMO_VERSION, demoDestination, isDemoOnly } from "@/lib/demo/session";
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const destination = demoDestination(req.nextUrl.pathname, isDemoOnly() ? DEMO_VERSION : req.cookies.get(DEMO_COOKIE)?.value);
   if (!destination) return NextResponse.next();
   const url = req.nextUrl.clone();

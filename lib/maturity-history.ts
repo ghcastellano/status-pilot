@@ -11,7 +11,7 @@
  *   • current_stage → re-derivado do ÚLTIMO stamp sobrevivente.
  *   • sprints   → closed se end <= W; active se em curso; future senão.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./db";
 import {
   computeTeamMetrics,
   referenceNow,
@@ -105,7 +105,7 @@ export function buildMaturityHistoryRows(
 
 /** Recomputa e grava (idempotente) o histórico de maturidade do time. */
 export async function storeMaturityHistory(
-  sb: SupabaseClient,
+  sb: Database,
   team: TeamRow,
   sprints: SprintRow[],
   issues: IssueRow[]

@@ -1,24 +1,24 @@
 /**
- * scripts/sync-jira-to-supabase.ts
- * Lê as issues DO JIRA (via API) e grava no Supabase, junto com teams/sprints/
+ * scripts/sync-jira-to-postgres.ts
+ * Lê as issues DO JIRA (via API) e grava no Neon, junto com teams/sprints/
  * epics (config canônica). A timeline de cada issue vem do bloco SPMETA — que
  * foi lido de volta da API do Jira: "os dados vêm do Jira" é literal.
  *
- * Rodar: npx tsx scripts/sync-jira-to-supabase.ts
+ * Rodar: npx tsx scripts/sync-jira-to-postgres.ts
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import { existsSync, readFileSync } from "node:fs";
 import { JiraClient, jiraConfigFromEnv, normStageName, stageToStatus } from "../lib/jira";
-import { getSupabaseAdmin } from "../lib/supabase";
+import { getDatabase } from "../lib/db";
 import { dataset, EPICS } from "./data/cafe-aurora";
 import { extractSpmeta } from "./jira-desc";
 
 async function main() {
   const cfg = jiraConfigFromEnv();
   const jira = new JiraClient(cfg);
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
   console.log("✓ autenticado:", (await jira.myself()).displayName);
 
   const keyMap: Record<string, string> = existsSync("scripts/.jira-keymap.json")
@@ -40,12 +40,12 @@ async function main() {
     jira_label: t.jira_label,
     jira_project_key: projectKey(t.id),
   }));
-  let r = await sb.from("teams").upsert(teamRows);
+  let r = await sb.upsert("teams", teamRows, {  });
   if (r.error) throw new Error("teams: " + r.error.message);
   console.log(`✓ teams: ${teamRows.length}`);
 
   // 2) sprints
-  r = await sb.from("sprints").upsert(dataset.sprints);
+  r = await sb.upsert("sprints", dataset.sprints, {  });
   if (r.error) throw new Error("sprints: " + r.error.message);
   console.log(`✓ sprints: ${dataset.sprints.length}`);
 
@@ -59,7 +59,7 @@ async function main() {
       jira_key: keyMap[`epic:${projectKey(t.id)}:${e.key}`] ?? null,
     }))
   );
-  r = await sb.from("epics").upsert(epicRows);
+  r = await sb.upsert("epics", epicRows, {  });
   if (r.error) throw new Error("epics: " + r.error.message);
   console.log(`✓ epics: ${epicRows.length}`);
 
@@ -102,13 +102,13 @@ async function main() {
       });
     }
     // limpa as issues do time e regrava (sync idempotente)
-    await sb.from("issues").delete().eq("team_id", team.id);
+    await sb.delete("issues", { where: { ["team_id"]: team.id } });
     for (let k = 0; k < rows.length; k += 200) {
       const slice = rows.slice(k, k + 200);
-      const res = await sb.from("issues").insert(slice);
+      const res = await sb.insert("issues", slice, {  });
       if (res.error) throw new Error(`issues ${pk}: ` + res.error.message);
     }
-    console.log(`✓ ${team.name} (${pk}): ${rows.length} issues do Jira → Supabase`);
+    console.log(`✓ ${team.name} (${pk}): ${rows.length} issues do Jira → Neon`);
     total += rows.length;
   }
 

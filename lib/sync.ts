@@ -1,6 +1,6 @@
 import { replaceTeamSnapshot } from "./snapshot";
 /**
- * lib/sync.ts — sincroniza as ISSUES do Jira para o Supabase (somente backend).
+ * lib/sync.ts — sincroniza as ISSUES do Jira para o Neon (somente backend).
  * Reutilizável pela rota /api/sync (botão "Sincronizar agora") e pelos scripts.
  *
  * Resolve os campos de data REAIS por nome (deploy-safe, sem arquivo local) e lê
@@ -10,7 +10,7 @@ import { replaceTeamSnapshot } from "./snapshot";
 import { jiraProviderFromEnv, extractSpmeta, normStageName, stageToStatus, type JiraProvider } from "./jira";
 import { ingestBoard } from "./jira-ingest";
 import type { TeamRow } from "./metrics";
-import { getSupabaseAdmin } from "./supabase";
+import { getDatabase } from "./db";
 
 // marco (coluna no banco) → nome do custom field de data no Jira
 const MILESTONE_FIELD: Record<string, string> = {
@@ -45,7 +45,7 @@ export async function syncIssuesFromJira(
 ): Promise<SyncResult> {
   // Provider injetado (Forge asApp) ou a conexão Basic do /config (fallback env).
   const jira = provider ?? jiraProviderFromEnv();
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
 
   // resolve fieldId por nome (deploy-safe)
   const allFields: any[] = await jira.raw("GET", "/rest/api/3/field");
@@ -58,12 +58,7 @@ export async function syncIssuesFromJira(
   const dateFieldIds = Object.values(fieldId);
 
   // times ATIVOS (config já no banco) — ou só UM, no auto-sync por seleção.
-  let query = sb
-    .from("teams")
-    .select("id, name, board_type, description, jira_project_key, jira_board_id, jira_board_name, active")
-    .eq("active", true);
-  if (onlyTeamId) query = query.eq("id", onlyTeamId);
-  const { data: teams, error } = await query;
+  const { data: teams, error } = await sb.select("teams", { where: { active: true, ...(onlyTeamId ? {id: onlyTeamId} : {}) } });
   if (error) throw new Error(error.message);
 
   const byTeam: { team: string; count: number }[] = [];

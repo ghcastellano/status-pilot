@@ -6,7 +6,7 @@ The project brings together a TypeScript/Node.js backend, a React dashboard, and
 
 ## Product capabilities
 
-- Synchronize Jira boards and issues into Supabase/PostgreSQL.
+- Synchronize Jira boards and issues into Neon/PostgreSQL.
 - Calculate cycle time, lead time, throughput, work in progress, flow efficiency, and Scrum delivery metrics.
 - Explore trends, aging work, and bottlenecks through interactive charts.
 - Generate status reports and answer questions using metrics supplied to an OpenAI model.
@@ -19,7 +19,7 @@ The project brings together a TypeScript/Node.js backend, a React dashboard, and
 | User interface | React, Next.js App Router, Tailwind, and Recharts |
 | Backend | TypeScript API route handlers running in the Node.js runtime |
 | Integrations | Server-side Jira REST API clients and OpenAI SDK |
-| Persistence | Supabase/PostgreSQL for delivery data, coaching records, cached answers, and request counters |
+| Persistence | Neon/PostgreSQL for delivery data, coaching records, cached answers, and request counters |
 | Automation | TypeScript scripts executed with `tsx` for setup, synchronization, and reconciliation |
 | Deployment | Next.js application configured for Vercel |
 
@@ -47,15 +47,15 @@ Run `npm ci` and `npm run dev`, open `/config`, and select **Open sample workspa
 
 The sample workspace includes Scrum and Kanban teams, delivery metrics and charts, maturity history, coaching plans, experiments, and illustrative reports. The fixture timeline is fixed at June 3, 2026; it is not live operational data. Dashboard metrics use the same calculation functions as connected data. Reports and answers are explicitly labeled deterministic examples, not live AI responses.
 
-An HTTP-only cookie selects the isolated API responder. All API routes are intercepted in this mode, and writes are rejected. No Jira, Supabase, or OpenAI requests are made by the sample responder. Browser histories use separate storage keys. Exit restores connected mode.
+An HTTP-only cookie selects the isolated API responder. All API routes are intercepted in this mode, and writes are rejected. No Jira, Neon, or OpenAI requests are made by the sample responder. Browser histories use separate storage keys. Exit restores connected mode.
 
-For a **public demonstration deployment**, set `STATUS_PILOT_DEMO_ONLY=1` at build and runtime, and configure no live-service credentials. This locks the application to sample data even without a cookie; visitors cannot exit into live APIs. Connected mode requires a verified, explicitly authorized Supabase Auth account.
+For a **public demonstration deployment**, set `STATUS_PILOT_DEMO_ONLY=1` at build and runtime, and configure no live-service credentials. This locks the application to sample data even without a cookie; visitors cannot exit into live APIs. Connected mode requires a verified, explicitly authorized Neon Auth account.
 
 The separate seed scripts can create fictional Jira records for integration development. Do not run them against an operational Jira project.
 
 ## Data and project scope
 
-Connected mode serves one private workspace. Every member on the server-side allowlist can access its teams and Jira connection. This is not a multi-tenant SaaS permission model. Connected APIs verify Supabase Auth identities, mutations require the same origin, and database tables deny browser-role access. AI budgets and team snapshot replacement are transactional. Forge ingestion is restricted to one configured installation and cloud. See the [release prerequisites](docs/SECURITY_ROLLOUT.md) before deploying.
+Connected mode serves one private workspace. Every member on the server-side allowlist can access its teams and Jira connection. This is not a multi-tenant SaaS permission model. Connected APIs verify Neon Auth identities, mutations require the same origin, and database tables deny browser-role access. AI budgets and team snapshot replacement are transactional. Forge ingestion is restricted to one configured installation and cloud. See the [release prerequisites](docs/SECURITY_ROLLOUT.md) before deploying.
 
 ## Development
 
@@ -82,3 +82,15 @@ Use a dedicated development database and Jira tenant. Environment values are int
 CI runs the offline tests, type checking, and a production build without service credentials. The reconciliation script requires dedicated external services and is not run in CI.
 
 See [the engineering review](docs/ENGINEERING_REVIEW.md) for remaining work and verification scope.
+
+## Neon deployment
+
+The connected workspace uses Neon PostgreSQL through server-side, parameterized queries and a pooled `DATABASE_URL`. The application role has DML privileges only; schema migrations use a separate owner connection (`DATABASE_URL_UNPOOLED`). No database credentials are shipped to the browser.
+
+Login uses Neon Auth email verification codes. `STATUS_PILOT_ALLOWED_EMAILS` restricts recipients and access; a session is checked against the Auth service on every protected request. Configure `NEON_AUTH_BASE_URL` and `NEON_AUTH_COOKIE_SECRET` as server variables. The API key used to administer Neon is not an application environment variable.
+
+Apply `npm run db:schema` using the direct owner connection. The versioned migrations in `db/migrations` run under a transaction and advisory lock, with a checksum ledger. The old `supabase/` SQL is retained solely as a reference for recovering an original Supabase backup; it is not applied on Neon.
+
+Production and previews must use different Neon branches and credentials. Keep previews in demonstration mode unless a dedicated test branch and Auth URL are configured. The synthetic demo remains independent of the database and does not write to Neon.
+
+The October 2026 migration creates a fresh Neon schema. Historical records from the inaccessible original Supabase project have not been imported. Restore those only from a verified export, initially into an isolated branch.

@@ -11,3 +11,7 @@ export function sameOrigin(request: Request): boolean {
   if (!origin) return false;
   try { return new URL(origin).origin === new URL(request.url).origin; } catch { return false; }
 }
+
+export function allowedLoginEmail(email: string, allowlist?: string): boolean {
+  return (allowlist ?? "").split(",").some(value => value.trim().toLowerCase() === email.trim().toLowerCase() && value.trim() !== "");
+}

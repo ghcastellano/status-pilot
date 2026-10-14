@@ -15,7 +15,7 @@ a referência da **Fase 1 (spike)** — o scaffold já está no repo.
   onde o nosso 3LO batia. _(mecanismo verificado 3-0 na pesquisa — ver histórico.)_
 - **Connect está morto para app novo**: desde 17/set/2025 todo app novo no
   Marketplace TEM que ser Forge; Connect sai de suporte no Q4/2026. Logo: **Forge**.
-- **Forge Remote** deixa o backend continuar **externo** (Vercel/Supabase) — só
+- **Forge Remote** deixa o backend continuar **externo** (Vercel/Neon) — só
   exige declarar o egress no manifest. É o padrão em produção da ActionableAgile
   (55 Degrees migrou Connect→Forge Remote em set/2025 mantendo backend próprio).
 
@@ -37,7 +37,7 @@ Vercel  POST /api/forge/sync   (app/api/forge/sync/route.ts)
    ▼
 api.atlassian.com/ex/jira/{cloudId}/rest/...   (asApp — passa onde 3LO era bloqueado)
    ▼
-Supabase  (issues/sprints/metrics_history)  →  dashboard lê do banco
+Neon  (issues/sprints/metrics_history)  →  dashboard lê do banco
 ```
 
 **O que reusamos sem mudar 1 linha:** `JiraBase` (os 11 métodos), `ingestBoard`
@@ -104,7 +104,7 @@ tenant aparecem sincronizados no dashboard, calculados dos dados reais.
 | Schema do Forge Remote muda | `forge lint` é a autoridade; manifest anotado com as docs. |
 | Egress declarado → sem selo "Runs on Atlassian" | Nave/AA também não têm; buscar Cloud Fortified depois, ou minimizar dado persistido (postura AA: agregar sem guardar issue crua). |
 | Token asApp só existe na invocação | Sync agendado (trigger 1h); TTL ~4h renovável. Modelo banco-first já suporta. |
-| Data residency corporativa | Supabase em região dedicada; minimizar persistência. |
+| Data residency corporativa | Neon em região dedicada; minimizar persistência. |
 
 ## Fontes (verificadas 3-0)
 

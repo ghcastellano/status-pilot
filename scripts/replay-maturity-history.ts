@@ -14,7 +14,7 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { getSupabaseAdmin } from "../lib/supabase";
+import { getDatabase } from "../lib/db";
 import {
   computeTeamMetrics,
   referenceNow,
@@ -60,11 +60,11 @@ function sprintAsOf(s: SprintRow, W: number): SprintRow {
 }
 
 async function main() {
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
   const [teamsRes, sprintsRes, issuesRes] = await Promise.all([
-    sb.from("teams").select("*"),
-    sb.from("sprints").select("*"),
-    sb.from("issues").select("*"),
+    sb.select("teams", { columns: "*" }),
+    sb.select("sprints", { columns: "*" }),
+    sb.select("issues", { columns: "*" }),
   ]);
   for (const r of [teamsRes, sprintsRes, issuesRes])
     if (r.error) throw new Error(r.error.message);
@@ -97,8 +97,8 @@ async function main() {
     }
 
     // idempotente: limpa e regrava o time
-    await sb.from("metrics_history").delete().eq("team_id", team.id);
-    const res = await sb.from("metrics_history").insert(rows);
+    await sb.delete("metrics_history", { where: { ["team_id"]: team.id } });
+    const res = await sb.insert("metrics_history", rows, {  });
     if (res.error) throw new Error(`metrics_history ${team.id}: ${res.error.message}`);
     const serie = rows.map((r) => r.tier ?? "·").join(" ");
     console.log(`✓ ${team.name} (${team.board_type}): ${rows.length} semanas → tiers [${serie}]`);

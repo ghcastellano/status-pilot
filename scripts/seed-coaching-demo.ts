@@ -8,7 +8,7 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { getSupabaseAdmin } from "../lib/supabase";
+import { getDatabase } from "../lib/db";
 
 const PLANS = [
   {
@@ -119,27 +119,21 @@ const EXPERIMENTS = [
 ];
 
 async function main() {
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
 
-  const p = await sb.from("coaching_plans").upsert(
-    PLANS.map((x) => ({ ...x, updated_at: new Date().toISOString() })),
-    { onConflict: "team_id" }
-  );
+  const p = await sb.upsert("coaching_plans", PLANS.map((x) => ({ ...x, updated_at: new Date().toISOString() })), { onConflict: "team_id" });
   if (p.error) throw new Error("plans: " + p.error.message);
   console.log(`✓ planos: ${PLANS.length}`);
 
-  const a = await sb.from("coaching_assessments").upsert(
-    ASSESSMENTS.map((x) => ({ ...x, updated_at: new Date().toISOString() })),
-    { onConflict: "team_id" }
-  );
+  const a = await sb.upsert("coaching_assessments", ASSESSMENTS.map((x) => ({ ...x, updated_at: new Date().toISOString() })), { onConflict: "team_id" });
   if (a.error) throw new Error("assessments: " + a.error.message);
   console.log(`✓ assessments: ${ASSESSMENTS.length}`);
 
   // experimentos: limpa e regrava (idempotente)
   for (const teamId of ["espresso", "coldbrew"]) {
-    await sb.from("coaching_experiments").delete().eq("team_id", teamId);
+    await sb.delete("coaching_experiments", { where: { ["team_id"]: teamId } });
   }
-  const e = await sb.from("coaching_experiments").insert(EXPERIMENTS);
+  const e = await sb.insert("coaching_experiments", EXPERIMENTS, {  });
   if (e.error) throw new Error("experiments: " + e.error.message);
   console.log(`✓ experimentos: ${EXPERIMENTS.length}`);
 

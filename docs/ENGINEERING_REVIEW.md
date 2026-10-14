@@ -6,7 +6,7 @@ Reviewed on October 14, 2026. Source review and isolated verification; not a pro
 
 | Area | Change | Verification |
 | --- | --- | --- |
-| API access | Supabase-verified session and explicit workspace membership on every connected API; same-origin mutation policy | Allowlist/origin unit tests and route coverage guard |
+| API access | Neon-verified session and explicit workspace membership on every connected API; same-origin mutation policy | Allowlist/origin unit tests and route coverage guard |
 | Database access | RLS enabled; table and RPC privileges denied to browser roles and PUBLIC; server-only access | Embedded PostgreSQL permission tests |
 | AI budgets | Atomic per-user and workspace-wide counters; database failures deny requests | Quota exhaustion and simultaneous request tests |
 | Data integrity | Transactional snapshot and history replacement with team scope validation | Failure injection proves previous data survives rollback |
@@ -27,4 +27,4 @@ The 14 automated tests include existing sample workspace and English translation
 
 ## Public demonstration
 
-The sample responder is allowlisted and read-only, uses deterministic synthetic data, and makes no database, Jira, or AI calls. `STATUS_PILOT_DEMO_ONLY=1` locks a deployment to that mode. Browser-visible endpoint URLs and Supabase publishable keys are expected; privileged credentials must remain server-only. Hidden URLs or buttons do not provide authorization.
+The sample responder is allowlisted and read-only, uses deterministic synthetic data, and makes no database, Jira, or AI calls. `STATUS_PILOT_DEMO_ONLY=1` locks a deployment to that mode. Browser-visible endpoint URLs and Neon publishable keys are expected; privileged credentials must remain server-only. Hidden URLs or buttons do not provide authorization.

@@ -4,14 +4,14 @@
  * Times: "Time Phoenix" (scrum, PHX-*) e "Time Aurora" (kanban, AUR-*), com
  * jira_board_id = null ⇒ o sync do Jira e o resync transparente os IGNORAM.
  * Gera issues/sprints sintéticos plausíveis (cycle time, say-do, bugs, aging),
- * grava no Supabase e roda a análise retroativa (metrics_history).
+ * grava no Neon e roda a análise retroativa (metrics_history).
  *
  * Idempotente. Rodar: npx tsx --env-file=.env.local scripts/seed-mock.ts
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { getSupabaseAdmin } from "../lib/supabase";
+import { getDatabase } from "../lib/db";
 import { storeMaturityHistory } from "../lib/maturity-history";
 import type { TeamRow, SprintRow, IssueRow, StageStamp } from "../lib/metrics";
 
@@ -191,21 +191,21 @@ function buildAurora(): Built {
 }
 
 async function main() {
-  const sb = getSupabaseAdmin();
+  const sb = getDatabase();
   for (const built of [buildPhoenix(), buildAurora()]) {
     const { team, sprints, issues } = built;
     // idempotente: recria o time mock (cascade limpa filhos)
-    await sb.from("teams").delete().eq("id", team.id);
-    let res = await sb.from("teams").insert({ ...team, last_synced_at: null });
+    await sb.delete("teams", { where: { ["id"]: team.id } });
+    let res = await sb.insert("teams", { ...team, last_synced_at: null }, {  });
     if (res.error) throw new Error(`teams ${team.id}: ${res.error.message}`);
-    res = await sb.from("epics").insert(EPICS.map((e) => ({ team_id: team.id, epic_key: e.key, name: e.name, summary: null, jira_key: null })));
+    res = await sb.insert("epics", EPICS.map((e) => ({ team_id: team.id, epic_key: e.key, name: e.name, summary: null, jira_key: null })), {  });
     if (res.error) throw new Error(`epics ${team.id}: ${res.error.message}`);
     if (sprints.length) {
-      res = await sb.from("sprints").insert(sprints);
+      res = await sb.insert("sprints", sprints, {  });
       if (res.error) throw new Error(`sprints ${team.id}: ${res.error.message}`);
     }
     for (let k = 0; k < issues.length; k += 200) {
-      res = await sb.from("issues").insert(issues.slice(k, k + 200));
+      res = await sb.insert("issues", issues.slice(k, k + 200), {  });
       if (res.error) throw new Error(`issues ${team.id}: ${res.error.message}`);
     }
     const pts = await storeMaturityHistory(sb, team, sprints, issues);

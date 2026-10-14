@@ -1,7 +1,7 @@
 /**
  * scripts/test-reconcile.ts
- * Testa que os dados do JIRA batem com o Supabase e com as métricas do dashboard.
- * Lê contagens reais do Jira, do Supabase e recalcula as métricas; faz asserts.
+ * Testa que os dados do JIRA batem com o Neon e com as métricas do dashboard.
+ * Lê contagens reais do Jira, do Neon e recalcula as métricas; faz asserts.
  *
  * Rodar: npx tsx scripts/test-reconcile.ts   (exit !=0 se algo divergir)
  */
@@ -49,7 +49,7 @@ async function main() {
     const jInFlight = jStatus.filter((s) => !isFunnel(s) && !isDone(s)).length;
     const jDelivery = jStatus.filter(isDelivery).length;
 
-    // App (Supabase → métricas)
+    // App (Neon → métricas)
     const { team: t, sprints, issues } = await fetchTeamData(team.id);
     const m = computeTeamMetrics(t!, sprints, issues);
 
@@ -58,7 +58,7 @@ async function main() {
     check("WIP em fluxo", jInFlight, m.flow.wip);
     check("delivery WIP", jDelivery, m.flow.deliveryWip);
 
-    // sanidade: Supabase current_stage == Jira status (normalizado), por issue
+    // sanidade: Neon current_stage == Jira status (normalizado), por issue
     const jByKey = new Map(jiraIssues.map((i) => [i.key, norm(i.fields.status?.name || "")]));
     let mismatch = 0;
     for (const i of issues) {
